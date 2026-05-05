@@ -102,6 +102,25 @@ p {
     color: #969696;
 }
 
+.remote-taken {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: not-allowed;
+    position: relative;
+
+    &::after {
+        content: 'taken';
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        opacity: 0.8;
+    }
+}
+
 #layer-menu table {
     margin: auto;
     height: 100%;
@@ -489,6 +508,41 @@ p {
     top: 0;
     width: 70%;
     height: 100%;
+}
+
+#waiting-host-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    color: #ddd;
+    text-align: center;
+    font-family: inherit;
+
+    .waiting-host-content {
+        max-width: 480px;
+        padding: 32px 48px;
+
+        h2 {
+            font-size: 32px;
+            margin: 0 0 12px;
+            font-weight: 600;
+        }
+
+        p {
+            font-size: 16px;
+            opacity: 0.7;
+            margin: 0;
+        }
+    }
+}
+
+body:not(.dark-theme) #waiting-host-overlay {
+    background: rgba(247, 246, 242, 0.92);
+    color: #3F3E37;
 }
 
 #lightbox-content .deathmatch h1 {

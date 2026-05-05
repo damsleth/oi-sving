@@ -4,7 +4,7 @@
         <meta charset='utf-8' />
         <meta name='description' content='Oi, Sving! - an open source HTML5 multiplayer take on Achtung, die Kurve!' />
         <meta name='keywords' content='Oi Sving, Achtung Kurve, Zatacka, Curve Fever, Open Source, Browser Game, Online, HTML5, JavaScript, Multiplayer' />
-        <meta name='author' content='https://github.com/damsleth/oi-sving' />
+        <meta name='author' content='@damsleth - https://github.com/damsleth/oi-sving' />
 
         <meta property="og:title" content="Oi, Sving!" />
         <meta property="og:type" content="website" />
@@ -58,7 +58,7 @@
                                     <div id='change-theme' class='button' onclick='OiSving.Theming.toggleTheme()'></div>
                                     <div class='toggle-sound button' onclick='OiSving.Sound.toggleSound()'></div>
                                     <div id='host-game' class='button' onclick='OiSving.Net.host().then(c => { document.getElementById("net-status").innerText = "Room: " + c }).catch(e => { document.getElementById("net-status").innerText = "Host failed: " + e.message })'>Host Game</div>
-                                    <div id='join-game' class='button' onclick='var c = prompt("Room code"); if (c) OiSving.Net.join(c.toUpperCase()).then(() => { document.getElementById("net-status").innerText = "Joined " + c.toUpperCase() }).catch(e => { document.getElementById("net-status").innerText = "Join failed: " + e.message })'>Join Game</div>
+                                    <div id='join-game' class='button' onclick='var c = prompt("Room code"); if (c) OiSving.Net.join(c.toUpperCase()).then(() => { document.getElementById("net-status").innerText = "Joined " + c.toUpperCase(); OiSving.Net.showWaitingForHost && OiSving.Net.showWaitingForHost() }).catch(e => { document.getElementById("net-status").innerText = "Join failed: " + e.message })'>Join Game</div>
                                     <div class='clear'></div>
                                 </div>
                                 <div id='net-status' class='light' style='margin-top:6px;text-align:center;'></div>
@@ -93,6 +93,13 @@
                 <p>Thanks to <a href='https://twitter.com/Cutting_Class' target='_blank'>Grant Robertson</a> for creating the music and sound effects.</p>
                 <br>
                 <a href='#' title='Close credits overlay' onclick='OiSving.Sound.onCreditsCloseClicked();' class='button'>Close</a>
+            </div>
+        </div>
+
+        <div id='waiting-host-overlay' class='hidden'>
+            <div class='waiting-host-content'>
+                <h2>Waiting for host</h2>
+                <p>The host will start the game when ready.</p>
             </div>
         </div>
 

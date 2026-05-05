@@ -69,6 +69,10 @@ OiSving.Game = {
                 if (OiSving.Net.isHost && OiSving.Net.isHost()) return;
                 if (OiSving.Game.isRoundStarted || OiSving.Game.isRunning) return;
 
+                // Host kicked the round off — joiner can drop the
+                // "waiting for host" overlay and follow into the game.
+                OiSving.Net.hideWaitingForHost && OiSving.Net.hideWaitingForHost();
+
                 if (OiSving.Game.curves.length === 0) {
                     var didStartGame = OiSving.Menu.startNetworkGameFromRoster && OiSving.Menu.startNetworkGameFromRoster();
                     if (!didStartGame) return;
@@ -176,7 +180,14 @@ OiSving.Game = {
         // the keyboard provider treats submit as a no-op.
         this.sampleAndSubmitLocalInputs(this.CURRENT_FRAME_ID);
 
-        for (var i in this.runningCurves) {
+        // Iterate in stable lexical order. drawNextFrame draws from the
+        // global seeded RNG (hole interval reset, superpower hooks), so
+        // every peer must visit curves in the same order to stay in
+        // lockstep — `for (var i in obj)` is insertion-order, and
+        // insertion order differs between host and joiner.
+        var ids = Object.keys(this.runningCurves).sort();
+        for (var k = 0; k < ids.length; k++) {
+            var i = ids[k];
             for (var j = 0; this.runningCurves[i] && j < this.runningCurves[i].length; ++j) {
                 this.runningCurves[i][j].drawNextFrame();
             }

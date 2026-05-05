@@ -27,16 +27,52 @@ import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
 
 OiSving.Menu = {
-    
+
     boundOnKeyDown: null,
     audioPlayer: null,
     scrollKeys: ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Spacebar', ' '],
-    
+    // Player ids the remote peer (host or joiner, depending on which side
+    // we are) has already activated. Locked here so the local user cannot
+    // pick the same color and end up with a collapsed roster after the
+    // dedupe in buildGameCurves. Populated/cleared by Net 'player-joined'
+    // and 'player-left' events.
+    remoteTakenIds: {},
+
     init: function() {
         this.initPlayerMenu();
         this.addWindowListeners();
         this.addMouseListeners();
         this.initMenuMusic();
+
+        if (OiSving.Net && OiSving.Net.on) {
+            OiSving.Net.on('player-joined', function(entry) {
+                if (entry.isLocal) return;
+                OiSving.Menu.lockRemoteColor(entry.playerId);
+            });
+            OiSving.Net.on('player-left', function(entry) {
+                if (entry.isLocal) return;
+                OiSving.Menu.unlockRemoteColor(entry.playerId);
+            });
+        }
+    },
+
+    lockRemoteColor: function(playerId) {
+        OiSving.Menu.remoteTakenIds[playerId] = true;
+        // Force-deactivate locally if the local user already had it picked,
+        // since the host's roster wins.
+        if (OiSving.getPlayer(playerId) && OiSving.getPlayer(playerId).isActive && OiSving.getPlayer(playerId).isActive()) {
+            OiSving.Menu.deactivatePlayer(playerId);
+        }
+        u.addClass('remote-taken', playerId);
+    },
+
+    unlockRemoteColor: function(playerId) {
+        delete OiSving.Menu.remoteTakenIds[playerId];
+        u.removeClass('remote-taken', playerId);
+    },
+
+    isRemoteTaken: function(playerId) {
+        return OiSving.Menu.remoteTakenIds[playerId] === true;
     },
         
     initPlayerMenu: function() {
@@ -116,6 +152,13 @@ OiSving.Menu = {
             playerIds = localPlayerIds.concat(remotePlayerIds).filter(function(id, index, arr) {
                 return arr.indexOf(id) === index;
             });
+            // Lockstep determinism: every peer must iterate curves in the
+            // same order so global RNG draws (spawn x/y, initial angle,
+            // hole interval randomness, RANDOM superpower picker) happen
+            // in the same sequence on host and joiner. Local-vs-remote
+            // ordering would put host's local players first on host but
+            // last on joiner — sort lexically by playerId instead.
+            playerIds.sort();
         } else {
             OiSving.players.forEach(function(player) {
                 if ( player.isActive() ) playerIds.push(player.getId());
@@ -238,6 +281,7 @@ OiSving.Menu = {
     },
 
     activatePlayer: function(playerId) {
+        if ( OiSving.Menu.isRemoteTaken(playerId) ) return;
         if ( OiSving.getPlayer(playerId).isActive() ) return;
 
         OiSving.getPlayer(playerId).setIsActive(true);
@@ -256,6 +300,7 @@ OiSving.Menu = {
     },
 
     togglePlayerActivation: function(playerId) {
+        if ( OiSving.Menu.isRemoteTaken(playerId) ) return;
         if ( OiSving.getPlayer(playerId).isActive() ) {
             OiSving.Menu.deactivatePlayer(playerId);
         } else {

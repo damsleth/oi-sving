@@ -169,6 +169,73 @@ function normalizePlayerIds(value: unknown): string[] {
   return [...new Set(value.map(v => String(v)).filter(id => allowed.has(id)))]
 }
 
+interface HostSimConfig {
+  inputDelayFrames: number
+  stateHashIntervalFrames: number
+  fps: number
+  holeInterval: number
+  holeIntervalRandomness: number
+  initialSuperpowerCount: number
+  allowedPlayerMask: number
+  arenaWidth: number
+  arenaHeight: number
+}
+
+function playerMaskToIds(mask: number): string[] {
+  const ids: string[] = []
+  for (let i = 0; i < PLAYER_ID_TABLE.length; i++) {
+    if (mask & (1 << i)) ids.push(PLAYER_ID_TABLE[i])
+  }
+  return ids
+}
+
+function playerIdsToMask(ids: string[]): number {
+  let mask = 0
+  for (const id of ids) {
+    const idx = PLAYER_ID_TABLE.indexOf(id)
+    if (idx >= 0) mask |= 1 << idx
+  }
+  return mask
+}
+
+// Joiner side: clobber local OiSving.Config with host's authoritative values
+// so simulation iteration draws the same RNG sequence on every peer. Game.fps
+// also drives the tick interval, so reapply on Game directly. allowedPlayerMask
+// trims OiSving.Config.Players to the host-allowed roster, which gates which
+// colors a joiner can pick from the menu.
+function applyHostConfig(cfg: HostSimConfig): void {
+  const cfgRoot = OiSving.Config
+  if (!cfgRoot) return
+
+  if (cfgRoot.Net) {
+    cfgRoot.Net.inputDelayFrames = cfg.inputDelayFrames
+    cfgRoot.Net.stateHashIntervalFrames = cfg.stateHashIntervalFrames
+    cfgRoot.Net.arenaWidth = cfg.arenaWidth
+    cfgRoot.Net.arenaHeight = cfg.arenaHeight
+  }
+  if (cfgRoot.Game) {
+    cfgRoot.Game.fps = cfg.fps
+    cfgRoot.Game.initialSuperpowerCount = cfg.initialSuperpowerCount
+  }
+  if (cfgRoot.Curve) {
+    cfgRoot.Curve.holeInterval = cfg.holeInterval
+    cfgRoot.Curve.holeIntervalRandomness = cfg.holeIntervalRandomness
+  }
+
+  const allowedIds = playerMaskToIds(cfg.allowedPlayerMask)
+  if (allowedIds.length > 0 && Array.isArray(cfgRoot.Players)) {
+    cfgRoot.Players = cfgRoot.Players.filter((p: { id: string }) => allowedIds.includes(p.id))
+  }
+
+  // Game.fps was captured into Game.fps + Game.intervalTimeOut at init time.
+  // If host's fps differs from joiner's compiled default, refresh the live
+  // values so setInterval ticks at host's rate.
+  if (OiSving.Game) {
+    OiSving.Game.fps = cfg.fps
+    OiSving.Game.intervalTimeOut = Math.round(1000 / cfg.fps)
+  }
+}
+
 function getActivePlayerIds(): string[] {
   return (OiSving.players ?? [])
     .filter((p: { isActive?: () => boolean }) => p.isActive?.())
@@ -224,15 +291,50 @@ function openSignaling(url: string): WebSocket {
 // byte order, so we go through DataView).
 // ---------------------------------------------------------------------------
 
-function encodeStart(seed: number, arenaWidth: number, arenaHeight: number, startFrame: number, configHash: number): ArrayBuffer {
-  const buf = new ArrayBuffer(1 + 4 + 2 + 2 + 4 + 4)
+// MSG_START is the host-authoritative round-start packet. Joiners reseed the
+// RNG, override their local OiSving.Config sim values from these bytes, and
+// then start the round. The host owns every byte here — joiner-side defaults
+// in OiSvingConfig.ts are placeholders that get clobbered before the first
+// frame ticks. Wire layout:
+//   0       u8   MSG_START
+//   1..4    u32  RNG seed
+//   5..6    u16  arena width  (px in canonical sim space)
+//   7..8    u16  arena height
+//   9..12   u32  start frame id
+//   13      u8   input delay frames
+//   14      u8   state-hash gossip interval (frames)
+//   15      u8   fps
+//   16..17  u16  hole interval (frames between holes)
+//   18..19  u16  hole interval randomness (extra random frames added)
+//   20      u8   initial superpower count
+//   21      u8   allowed-player bitmask (bit 0 = red, 1 = orange, ..., 5 = pink)
+function encodeStart(
+  seed: number,
+  arenaWidth: number,
+  arenaHeight: number,
+  startFrame: number,
+  inputDelayFrames: number,
+  stateHashIntervalFrames: number,
+  fps: number,
+  holeInterval: number,
+  holeIntervalRandomness: number,
+  initialSuperpowerCount: number,
+  allowedPlayerMask: number
+): ArrayBuffer {
+  const buf = new ArrayBuffer(22)
   const v = new DataView(buf)
   v.setUint8(0, MSG_START)
   v.setUint32(1, seed >>> 0)
   v.setUint16(5, arenaWidth)
   v.setUint16(7, arenaHeight)
-  v.setUint32(9, configHash >>> 0)
-  v.setUint32(13, startFrame)
+  v.setUint32(9, startFrame)
+  v.setUint8(13, inputDelayFrames & 0xff)
+  v.setUint8(14, stateHashIntervalFrames & 0xff)
+  v.setUint8(15, fps & 0xff)
+  v.setUint16(16, holeInterval)
+  v.setUint16(18, holeIntervalRandomness)
+  v.setUint8(20, initialSuperpowerCount & 0xff)
+  v.setUint8(21, allowedPlayerMask & 0xff)
   return buf
 }
 
@@ -290,14 +392,38 @@ function dispatch(msg: ArrayBuffer): void {
       const seed = v.getUint32(1)
       const arenaWidth = v.getUint16(5)
       const arenaHeight = v.getUint16(7)
-      const startFrame = v.getUint32(13)
+      const startFrame = v.getUint32(9)
+      const inputDelay = v.getUint8(13)
+      const hashInterval = v.getUint8(14)
+      const fps = v.getUint8(15)
+      const holeInterval = v.getUint16(16)
+      const holeRandom = v.getUint16(18)
+      const initialSp = v.getUint8(20)
+      const allowedMask = v.getUint8(21)
+
+      // Apply host's authoritative simulation config before constructing
+      // anything that reads it. Host owns the rules — joiner's compiled
+      // defaults are placeholders we deliberately overwrite here so a
+      // joiner running a slightly different build cannot diverge.
+      applyHostConfig({
+        inputDelayFrames: inputDelay,
+        stateHashIntervalFrames: hashInterval,
+        fps,
+        holeInterval,
+        holeIntervalRandomness: holeRandom,
+        initialSuperpowerCount: initialSp,
+        allowedPlayerMask: allowedMask,
+        arenaWidth,
+        arenaHeight,
+      })
+
       setSimRng(new Rng(seed))
       OiSving.Field?.setArenaSize?.(arenaWidth, arenaHeight)
       // Joiner side: install the network input provider so curves read
       // through the lockstep buffer. Host calls startRound() locally and
       // installs the provider there.
       inputBuffer = new InputBuffer()
-      netProvider = new NetInputProvider(inputBuffer, getNetConfig().inputDelayFrames)
+      netProvider = new NetInputProvider(inputBuffer, inputDelay)
       setInputProvider(netProvider)
       // Align this peer's frame counter to the host's so input frame ids
       // line up. Game has not necessarily started yet — once it does its
@@ -484,14 +610,39 @@ OiSving.Net = {
     })
   },
 
-  startRound(seed: number, arenaWidth: number, arenaHeight: number, startFrame = 0, configHash = 0): void {
+  startRound(seed: number, arenaWidth: number, arenaHeight: number, startFrame = 0): void {
     if (!isHost) throw new Error('startRound is host-only')
     setSimRng(new Rng(seed))
     OiSving.Field?.setArenaSize?.(arenaWidth, arenaHeight)
+
+    // Host snapshots its own simulation config and ships it to every joiner
+    // so they overwrite local defaults before NetInputProvider/Game read
+    // them. This is what makes the host authoritative for rules: input
+    // delay, hash interval, fps, hole interval, hole randomness, initial
+    // superpower count, and the allowed-color list all come from here.
+    const cfgRoot = OiSving.Config ?? {}
+    const netCfg = cfgRoot.Net ?? {}
+    const gameCfg = cfgRoot.Game ?? {}
+    const curveCfg = cfgRoot.Curve ?? {}
+    const inputDelay = (netCfg.inputDelayFrames ?? 2) | 0
+    const hashInterval = (netCfg.stateHashIntervalFrames ?? 60) | 0
+    const fps = (gameCfg.fps ?? 60) | 0
+    const holeInterval = (curveCfg.holeInterval ?? 150) | 0
+    const holeRandom = (curveCfg.holeIntervalRandomness ?? 300) | 0
+    const initialSp = (gameCfg.initialSuperpowerCount ?? 2) | 0
+    const allowedIds: string[] = Array.isArray(cfgRoot.Players)
+      ? (cfgRoot.Players as { id: string }[]).map(p => p.id)
+      : [...PLAYER_ID_TABLE]
+    const allowedMask = playerIdsToMask(allowedIds)
+
     inputBuffer = new InputBuffer()
-    netProvider = new NetInputProvider(inputBuffer, getNetConfig().inputDelayFrames)
+    netProvider = new NetInputProvider(inputBuffer, inputDelay)
     setInputProvider(netProvider)
-    broadcast('control', encodeStart(seed, arenaWidth, arenaHeight, startFrame, configHash))
+    broadcast('control', encodeStart(
+      seed, arenaWidth, arenaHeight, startFrame,
+      inputDelay, hashInterval, fps,
+      holeInterval, holeRandom, initialSp, allowedMask,
+    ))
     events.emit('round-start', seed, arenaWidth, arenaHeight, startFrame)
   },
 
@@ -530,6 +681,22 @@ OiSving.Net = {
   broadcastUnpause(): void {
     if (!isHost) return
     broadcast('control', encodeUnpause())
+  },
+
+  // Joiner-only UI helper. Called from the inline join handler after a
+  // successful Net.join so the joiner sees that they have connected and
+  // are now waiting on the host. The 'round-start' listener in
+  // OiSving.Game.init hides the overlay when the host kicks the round off.
+  showWaitingForHost(): void {
+    if (typeof document === 'undefined') return
+    const el = document.getElementById('waiting-host-overlay')
+    if (el) el.classList.remove('hidden')
+  },
+
+  hideWaitingForHost(): void {
+    if (typeof document === 'undefined') return
+    const el = document.getElementById('waiting-host-overlay')
+    if (el) el.classList.add('hidden')
   },
 
   // Constants re-exported for legacy code paths reading via OiSving.Net.
