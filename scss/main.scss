@@ -522,6 +522,15 @@ p {
     text-align: center;
     font-family: inherit;
 
+    // The id selector outranks the global `.hidden { display: none }` rule
+    // so the overlay would render on first load until the user joined a
+    // room. Override here so the hidden class actually hides it. Single-
+    // player and host flows never call showWaitingForHost(), so this is
+    // the only way the overlay disappears outside an active joiner state.
+    &.hidden {
+        display: none;
+    }
+
     .waiting-host-content {
         max-width: 480px;
         padding: 32px 48px;
