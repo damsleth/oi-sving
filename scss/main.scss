@@ -58,6 +58,14 @@ strong {
 
 canvas {
     position: absolute;
+    // Center within #content-left so the letterbox bars on viewports
+    // whose aspect ratio differs from the host's authoritative arena
+    // sit symmetrically around the play area instead of pushing it to
+    // the corner. JS sets canvas.style.width/height in pixels matching
+    // the uniformly-scaled arena dims; this rule centers that block.
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
 }
 
 iframe {

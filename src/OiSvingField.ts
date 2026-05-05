@@ -104,32 +104,56 @@ OiSving.Field = {
         document.body.style.height = window.innerHeight + 'px';
         document.body.style.width = window.innerWidth + 'px';
 
-        this.width = window.innerWidth * OiSving.Config.Field.width;
-        this.height = window.innerHeight;
-        this.canvas.width = this.width;
-        this.canvas.height = this.height;
+        var availableWidth = window.innerWidth * OiSving.Config.Field.width;
+        var availableHeight = window.innerHeight;
 
-        // In single-player the arena is the viewport. In network rounds the
-        // host pins canonical arena dims via setArenaSize() before resize()
-        // runs again, in which case we keep the canonical pair.
         if (this.arenaWidth === undefined || this.arenaHeight === undefined) {
-            this.arenaWidth = this.width;
-            this.arenaHeight = this.height;
+            // Pre-network bootstrap and single-player: arena IS the viewport,
+            // no aspect-preserving fit is needed because the simulation grid
+            // is the local screen by definition.
+            this.arenaWidth = availableWidth;
+            this.arenaHeight = availableHeight;
+            this.width = availableWidth;
+            this.height = availableHeight;
+        } else {
+            // Network rounds: the host's arena dimensions are authoritative
+            // (broadcast in MSG_START). Every peer must render the simulation
+            // at the same aspect ratio so curve thickness, hole spacing, and
+            // hit zones look identical regardless of viewport. Pick a uniform
+            // scale that fits the arena inside the available area; CSS
+            // centers the resulting canvas so wider viewports get letterboxed
+            // bars rather than stretched curves.
+            var scale = Math.min(availableWidth / this.arenaWidth, availableHeight / this.arenaHeight);
+            this.width = Math.round(this.arenaWidth * scale);
+            this.height = Math.round(this.arenaHeight * scale);
         }
 
-        this.pixiApp.resize();
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        this.canvas.style.width = this.width + 'px';
+        this.canvas.style.height = this.height + 'px';
+
+        if (this.pixiApp.renderer && this.pixiApp.renderer.resize) {
+            this.pixiApp.renderer.resize(this.width, this.height);
+        }
         this.applyArenaScale();
         this.drawField();
     },
 
     // Pin canonical simulation dimensions. All collision, spawn, power-up,
     // and state-hash math runs against these — never against the local
-    // viewport. The local PIXI stage is scaled to fit so a 1280x720 host
-    // arena renders identically on a phone or a wide monitor.
+    // viewport. The local PIXI stage is scaled uniformly to fit so a
+    // 1280x720 host arena renders at the same aspect ratio on a phone, a
+    // 4:3 monitor, or an ultrawide. Re-run resize so the canvas pixel
+    // dimensions and centering pick up the new arena aspect ratio.
     setArenaSize: function(width, height) {
         this.arenaWidth = width;
         this.arenaHeight = height;
-        this.applyArenaScale();
+        // MSG_START dispatch may call this before Field.init has run (the
+        // joiner only inits the field when transitioning to the game
+        // screen). resize() needs a real canvas, so we just stash the
+        // arena dims here and let Field.init -> resize() pick them up.
+        if (this.canvas) this.resize();
     },
 
     getArenaSize: function() {
@@ -139,9 +163,12 @@ OiSving.Field = {
     applyArenaScale: function() {
         if (!this.pixiApp || this.arenaWidth === undefined || this.arenaHeight === undefined) return;
         if (this.pixiApp.stage) {
-            var sx = this.width / this.arenaWidth;
-            var sy = this.height / this.arenaHeight;
-            this.pixiApp.stage.scale.set(sx, sy);
+            // After resize() the canvas matches arena aspect ratio, so a
+            // uniform scale is correct on both axes. Locking sx === sy
+            // prevents elliptical curves on viewports whose aspect ratio
+            // differs from the arena's.
+            var s = this.width / this.arenaWidth;
+            this.pixiApp.stage.scale.set(s, s);
         }
     },
 
