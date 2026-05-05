@@ -251,6 +251,16 @@ function dispatch(msg: ArrayBuffer): void {
       const startFrame = v.getUint32(13)
       setSimRng(new Rng(seed))
       OiSving.Field?.setArenaSize?.(arenaWidth, arenaHeight)
+      // Joiner side: install the network input provider so curves read
+      // through the lockstep buffer. Host calls startRound() locally and
+      // installs the provider there.
+      inputBuffer = new InputBuffer()
+      netProvider = new NetInputProvider(inputBuffer, getNetConfig().inputDelayFrames)
+      setInputProvider(netProvider)
+      // Align this peer's frame counter to the host's so input frame ids
+      // line up. Game has not necessarily started yet — once it does its
+      // CURRENT_FRAME_ID will tick from `startFrame`.
+      if (OiSving.Game) OiSving.Game.CURRENT_FRAME_ID = startFrame
       events.emit('round-start', seed, arenaWidth, arenaHeight, startFrame)
       return
     }
@@ -267,8 +277,15 @@ function dispatch(msg: ArrayBuffer): void {
       return
     }
     case MSG_STATE_HASH: {
-      // Compare against local hash; emit mismatch for diagnostics. The
-      // local hash bookkeeping is the responsibility of Game.
+      // Compare against local hash if available. Mismatch is emitted as
+      // an event; the round can choose to abort to lobby (the simpler
+      // failure mode the plan calls for) rather than try to resync.
+      const frameId = v.getUint32(1)
+      const remoteHash = v.getUint32(5)
+      const localHash = OiSving.Game?.computeStateHash?.()
+      if (typeof localHash === 'number' && localHash !== remoteHash) {
+        events.emit('state-hash-mismatch', frameId, remoteHash, localHash)
+      }
       return
     }
     default:

@@ -26,6 +26,14 @@
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
 import { rand } from './rng'
+import { INPUT_LEFT, INPUT_RIGHT, INPUT_SUPERPOWER, getInputProvider } from './input-provider'
+
+// Resolve the active input bitfield for `curve`'s player at the current
+// simulation frame. Routed through InputProvider so the same code path
+// drives keyboard, split-keyboard, and remote network players.
+function inputBitsFor(curve) {
+    return getInputProvider().get(OiSving.Game.CURRENT_FRAME_ID, curve.getPlayer().getId());
+}
 
 OiSving.Superpowerconfig = {};
 
@@ -180,7 +188,7 @@ OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.JUMP] = {
             this.getAudioPlayer().play('superpower-jump', {reset: true});
         }
 
-        if ( !curve.getGame().isKeyDown(curve.getPlayer().getKeySuperpower()) ) {
+        if ( !(inputBitsFor(curve) & INPUT_SUPERPOWER) ) {
             this.setIsActive(false); //super power key has been released, can be used again
         }
     },
@@ -281,7 +289,7 @@ OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.VERTICAL_BAR] = {
             this.setIsActive(true);
         }
 
-        if ( !curve.getGame().isKeyDown(curve.getPlayer().getKeySuperpower()) ) {
+        if ( !(inputBitsFor(curve) & INPUT_SUPERPOWER) ) {
             this.setIsActive(false); //super power key has been released, can be used again
         }
     },
@@ -493,7 +501,7 @@ OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.HYDRA] = {
             this.setIsActive(true);
         }
 
-        if ( !curve.getGame().isKeyDown(curve.getPlayer().getKeySuperpower()) ) {
+        if ( !(inputBitsFor(curve) & INPUT_SUPERPOWER) ) {
             this.setIsActive(false); //super power key has been released, can be used again
         }
     },
@@ -548,7 +556,7 @@ OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.REVERSE] = {
             this.setIsActive(true);
         }
 
-        if ( !curve.getGame().isKeyDown(curve.getPlayer().getKeySuperpower()) ) {
+        if ( !(inputBitsFor(curve) & INPUT_SUPERPOWER) ) {
             this.setIsActive(false); //super power key has been released, can be used again
         }
     },
@@ -605,9 +613,9 @@ OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.SQUARE_HEAD] = {
 
         var keyPressed = null;
 
-        if ( curve.getGame().isKeyDown(curve.getPlayer().getKeyRight()) ) {
+        if ( (inputBitsFor(curve) & INPUT_RIGHT) ) {
             keyPressed = 'right';
-        } else if ( curve.getGame().isKeyDown(curve.getPlayer().getKeyLeft()) ) {
+        } else if ( (inputBitsFor(curve) & INPUT_LEFT) ) {
             keyPressed = 'left';
         }
 
@@ -703,7 +711,7 @@ OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.SHOOT_HOLES] = {
             this.getAudioPlayer().play('superpower-shoot-holes', {reset: true});
         }
 
-        if ( !curve.getGame().isKeyDown(curve.getPlayer().getKeySuperpower()) ) {
+        if ( !(inputBitsFor(curve) & INPUT_SUPERPOWER) ) {
             this.setIsActive(false); //super power key has been released, can be used again
         }
     },

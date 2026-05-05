@@ -33,6 +33,13 @@ OiSving.Player = function(id, keyLeft, keyRight, keySuperpower) {
     var superPowerElement = null;
     var isActive = false;
     var color = null;
+
+    // Multiplayer flags. Defaults match single-player and split-keyboard:
+    // every player on this peer is local and owns its own keyboard inputs.
+    // Remote players (driven by network input bits only) get isLocal=false
+    // and a peerId pointing at their owning peer.
+    this.isLocal = true;
+    this.peerId = null;
     
     this.incrementPoints = function() {
         points++;

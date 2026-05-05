@@ -43,9 +43,12 @@ class KeyboardInputProvider implements InputProvider {
   constructor(private game: any) {}
 
   get(_frameId: number, playerId: string): InputBits {
+    // The OiSving namespace is attached to window by namespace.ts. We pull
+    // through it here rather than re-importing the namespace module to
+    // avoid a circular import (input-provider <-> namespace via Game).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const player: any = this.game.OiSving?.getPlayer?.(playerId)
-      ?? (window as unknown as { OiSving: { getPlayer(id: string): unknown } }).OiSving.getPlayer(playerId)
+    const ns = (window as unknown as { OiSving: any }).OiSving
+    const player = ns?.getPlayer?.(playerId)
     if (!player) return 0
     let bits = 0
     if (this.game.isKeyDown(player.getKeyLeft())) bits |= INPUT_LEFT

@@ -25,6 +25,13 @@
 
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
+import {
+    INPUT_LEFT,
+    INPUT_RIGHT,
+    INPUT_SUPERPOWER,
+    getInputProvider,
+    installKeyboardProvider,
+} from './input-provider'
 
 OiSving.Game = {    
     
@@ -50,20 +57,111 @@ OiSving.Game = {
         this.intervalTimeOut = Math.round(1000 / this.fps);
         this.playerScoresElement = document.getElementById('player-scores');
 
+        // Single-player + split-keyboard keep their snappy "no input delay"
+        // feel because the keyboard provider polls keysDown directly. When
+        // OiSving.Net.startRound() runs, that swaps in the network provider
+        // and applies INPUT_DELAY_FRAMES to local AND remote players for
+        // lockstep symmetry.
+        installKeyboardProvider(this);
+
         this.Audio.init();
     },
-    
+
     run: function() {
         requestAnimationFrame(this.drawFrame.bind(this));
     },
-    
+
+    // Sample the local keyboard for every running curve whose player is
+    // local, build the bit field, and submit it through the active input
+    // provider. KeyboardInputProvider.submit is a no-op (keysDown is the
+    // source of truth in single-player). NetInputProvider.submit schedules
+    // the bits at frameId + inputDelayFrames AND broadcasts to peers.
+    sampleAndSubmitLocalInputs: function(frameId) {
+        var provider = getInputProvider();
+        for (var pid in this.runningCurves) {
+            var list = this.runningCurves[pid];
+            if (!list || list.length === 0) continue;
+            var curve = list[0];
+            var player = curve.getPlayer();
+            // A player without an explicit isLocal flag is treated as local
+            // — that covers single-player, split-keyboard, and the host's
+            // own players in network rounds.
+            if (player.isLocal === false) continue;
+            var bits = 0;
+            if (this.isKeyDown(player.getKeyLeft())) bits |= INPUT_LEFT;
+            if (this.isKeyDown(player.getKeyRight())) bits |= INPUT_RIGHT;
+            if (this.isKeyDown(player.getKeySuperpower())) bits |= INPUT_SUPERPOWER;
+            provider.submit(frameId, player.getId(), bits);
+        }
+    },
+
+    // Periodic state hash gossip. Runs every Config.Net.stateHashIntervalFrames
+    // (default 60). Hashes arena dims plus each curve's (x, y, angle,
+    // holeCountDown, running/dead) tuple so divergence between peers is
+    // visible within a second. Local-only games still compute the hash so
+    // the cost is honest, but no broadcast happens because OiSving.Net
+    // is not active.
+    maybeGossipStateHash: function(frameId) {
+        var cfg = OiSving.Config && OiSving.Config.Net;
+        var intervalFrames = (cfg && cfg.stateHashIntervalFrames) || 60;
+        if (frameId === 0 || frameId % intervalFrames !== 0) return;
+        var hash = this.computeStateHash();
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive()) {
+            OiSving.Net.reportStateHash(frameId, hash);
+        }
+    },
+
+    // 32-bit FNV-1a over the canonical arena dims and each curve's
+    // (round(x*100), round(y*100), round(angle*1e6), holeCountDown, running)
+    // tuple. Integer-only quantization so floats don't drift across peers.
+    computeStateHash: function() {
+        var hash = 0x811c9dc5 >>> 0;
+        function mix(n) {
+            hash ^= (n >>> 0);
+            hash = Math.imul(hash, 0x01000193) >>> 0;
+        }
+        var arena = OiSving.Field.getArenaSize ? OiSving.Field.getArenaSize() : { width: 0, height: 0 };
+        mix(arena.width | 0);
+        mix(arena.height | 0);
+        // Stable iteration order across peers: lexical sort by playerId.
+        var ids = Object.keys(this.runningCurves).sort();
+        for (var k = 0; k < ids.length; k++) {
+            var id = ids[k];
+            var list = this.runningCurves[id];
+            if (!list) continue;
+            for (var i = 0; i < list.length; i++) {
+                var c = list[i];
+                mix(Math.round(c.getPositionX() * 100));
+                mix(Math.round(c.getPositionY() * 100));
+                mix(Math.round(c.getOptions().angle * 1e6));
+                mix(c.getOptions().holeCountDown | 0);
+                mix(1);
+            }
+        }
+        return hash >>> 0;
+    },
+
     drawFrame: function() {
         this.CURRENT_FRAME_ID++;
+
+        // Lockstep step 1: collect this peer's local input for the frame
+        // BEFORE the simulation reads inputs. With INPUT_DELAY_FRAMES > 0
+        // the network provider schedules these bits to take effect later;
+        // the keyboard provider treats submit as a no-op.
+        this.sampleAndSubmitLocalInputs(this.CURRENT_FRAME_ID);
 
         for (var i in this.runningCurves) {
             for (var j = 0; this.runningCurves[i] && j < this.runningCurves[i].length; ++j) {
                 this.runningCurves[i][j].drawNextFrame();
             }
+        }
+
+        // Lockstep step 2: drift detection + bounded buffer pruning.
+        this.maybeGossipStateHash(this.CURRENT_FRAME_ID);
+        if (OiSving.Net && OiSving.Net.pruneInputs) {
+            // Keep one second of input history. Past that the deterministic
+            // "last-known bits" fallback in the buffer is enough.
+            OiSving.Net.pruneInputs(this.CURRENT_FRAME_ID - this.fps);
         }
     },
     

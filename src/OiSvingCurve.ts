@@ -26,6 +26,7 @@
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
 import { rand } from './rng'
+import { INPUT_LEFT, INPUT_RIGHT, INPUT_SUPERPOWER, getInputProvider } from './input-provider'
 
 OiSving.Curve = function(player, game, field, config, audioPlayer) {
 
@@ -221,9 +222,14 @@ OiSving.Curve.prototype.die = function() {
 };
 
 OiSving.Curve.prototype.computeNewAngle = function() {
-    if ( this.getGame().isKeyDown(this.getPlayer().getKeyRight()) ) {
+    // Routed through InputProvider so the same physics path drives keyboard,
+    // split-keyboard, and remote network players. In single-player this still
+    // resolves to keysDown immediately; in network rounds it resolves to the
+    // buffered bitfield delayed by Config.Net.inputDelayFrames.
+    var bits = getInputProvider().get(OiSving.Game.CURRENT_FRAME_ID, this.getPlayer().getId());
+    if (bits & INPUT_RIGHT) {
         this.incrementAngle();
-    } else if ( this.getGame().isKeyDown(this.getPlayer().getKeyLeft()) ) {
+    } else if (bits & INPUT_LEFT) {
         this.decrementAngle();
     }
 };
@@ -235,7 +241,8 @@ OiSving.Curve.prototype.setRandomAngle = function() {
 OiSving.Curve.prototype.useSuperpower = function(hook) {
     if ( !this.getPlayer().getSuperpower().usesHook(hook) ) return false;
     if ( this.getPlayer().getSuperpower().isActive() ) return true;
-    if ( OiSving.Game.isKeyDown(this.getPlayer().getKeySuperpower()) && this.getPlayer().getSuperpower().getCount() > 0 ) return true;
+    var bits = getInputProvider().get(OiSving.Game.CURRENT_FRAME_ID, this.getPlayer().getId());
+    if ( (bits & INPUT_SUPERPOWER) && this.getPlayer().getSuperpower().getCount() > 0 ) return true;
 
     return false;
 };
