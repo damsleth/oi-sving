@@ -1,19 +1,19 @@
-// Self-hostable WebSocket signaling rendezvous for Oi, Sving!. Brokers
-// SDP offer/answer + ICE candidates between a host and up to 5 joiners,
-// then drops out of the data path once datachannels are open.
+// LAN game + signaling server for Oi, Sving!. Serves the browser game over
+// HTTP and brokers SDP offer/answer + ICE candidates over WebSocket. Runs on
+// the Bun runtime (Bun.serve) — no Node.js required.
 //
 // Run locally:
-//   bun run server/signaling-node.ts
+//   bun run serve
 //
 // Or compile a standalone executable:
-//   bun build --compile --outfile=oi-sving-signaling server/signaling-node.ts
-//
-// Configure the client to point at this server by setting
-// `OiSving.Config.Net.signalingUrl` to e.g. `ws://localhost:8787/`.
+//   bun run build:signaling
+
+import { embeddedAssets } from './embedded-assets'
 
 interface RoomMember {
   peerId: string
   ws: ServerWebSocket
+  playerIds: string[]
 }
 
 interface Room {
@@ -27,12 +27,25 @@ interface Room {
 type ServerWebSocket = import('bun').ServerWebSocket<{ peerId?: string; code?: string }>
 
 const PORT = Number(process.env.PORT ?? 8787)
+const BIND_HOST = process.env.BIND_HOST ?? '0.0.0.0'
+const STATIC_ROOT = process.env.OISVING_STATIC_ROOT ?? process.cwd()
 const ROOM_TTL_MS = 60_000
 const CODE_LENGTH = 4
 // Drop letters that are visually ambiguous on a phone (no I/L/O/0/1).
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
 const rooms = new Map<string, Room>()
+const MIME_TYPES: Record<string, string> = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.mp3': 'audio/mpeg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+}
 
 function mintCode(): string {
   for (let attempt = 0; attempt < 32; attempt++) {
@@ -53,6 +66,11 @@ function send(ws: ServerWebSocket, payload: object): void {
   }
 }
 
+function normalizePlayerIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.map(v => String(v)).filter(Boolean))]
+}
+
 function gcRooms(): void {
   const now = Date.now()
   for (const [code, room] of rooms) {
@@ -68,16 +86,57 @@ function gcRooms(): void {
 
 setInterval(gcRooms, 10_000)
 
+function contentType(pathname: string): string {
+  const ext = pathname.match(/\.[^.\/]+$/)?.[0]?.toLowerCase()
+  return ext ? MIME_TYPES[ext] ?? 'application/octet-stream' : 'application/octet-stream'
+}
+
+function staticPath(url: URL): string | null {
+  let pathname = '/'
+  try {
+    pathname = decodeURIComponent(url.pathname)
+  } catch {
+    return null
+  }
+  // Embedded asset table wins. In a compiled executable this is the only
+  // source. In dev these resolve to real fs paths anyway, so the same code
+  // serves both modes.
+  const embedded = embeddedAssets[pathname]
+  if (embedded) return embedded
+
+  const relative = pathname === '/' ? 'index.html' : pathname.slice(1)
+  if (!relative || relative.includes('\0')) return null
+
+  const normalized = relative.split('/').filter(part => part !== '' && part !== '.')
+  if (normalized.includes('..')) return null
+  return `${STATIC_ROOT}/${normalized.join('/')}`
+}
+
 const server = Bun.serve<{ peerId?: string; code?: string }>({
   port: PORT,
-  fetch(req, srv) {
-    if (srv.upgrade(req, { data: {} })) return undefined
-    if (new URL(req.url).pathname === '/health') {
+  hostname: BIND_HOST,
+  async fetch(req, srv) {
+    const url = new URL(req.url)
+    if (req.headers.get('upgrade') === 'websocket') {
+      if (srv.upgrade(req, { data: {} })) return undefined
+      return new Response('websocket upgrade failed\n', { status: 400 })
+    }
+    if (url.pathname === '/health') {
       return new Response(JSON.stringify({ ok: true, rooms: rooms.size }), {
         headers: { 'content-type': 'application/json' },
       })
     }
-    return new Response('oi-sving signaling. WebSocket only.\n', { status: 426 })
+
+    const path = staticPath(url)
+    if (!path) return new Response('Not found\n', { status: 404 })
+
+    const file = Bun.file(path)
+    if (!(await file.exists())) return new Response('Not found\n', { status: 404 })
+    return new Response(file, {
+      headers: {
+        'content-type': contentType(path),
+      },
+    })
   },
   websocket: {
     open(_ws) {
@@ -99,7 +158,7 @@ const server = Bun.serve<{ peerId?: string; code?: string }>({
           const code = mintCode()
           const room: Room = {
             code,
-            host: { peerId, ws },
+            host: { peerId, ws, playerIds: normalizePlayerIds(msg.playerIds) },
             joiners: new Map(),
             createdAt: Date.now(),
             lastActivityAt: Date.now(),
@@ -116,12 +175,13 @@ const server = Bun.serve<{ peerId?: string; code?: string }>({
           const room = rooms.get(code)
           if (!room) return send(ws, { type: 'error', message: 'unknown room' })
           if (!peerId) return send(ws, { type: 'error', message: 'missing peerId' })
-          room.joiners.set(peerId, { peerId, ws })
+          const playerIds = normalizePlayerIds(msg.playerIds)
+          room.joiners.set(peerId, { peerId, ws, playerIds })
           room.lastActivityAt = Date.now()
           ws.data.peerId = peerId
           ws.data.code = code
-          send(ws, { type: 'joined', hostId: room.host.peerId })
-          send(room.host.ws, { type: 'peer-joined', peerId })
+          send(ws, { type: 'joined', hostId: room.host.peerId, hostPlayerIds: room.host.playerIds })
+          send(room.host.ws, { type: 'peer-joined', peerId, playerIds })
           return
         }
         case 'offer':
@@ -165,7 +225,8 @@ const server = Bun.serve<{ peerId?: string; code?: string }>({
   },
 })
 
-console.log(`oi-sving signaling on ws://localhost:${server.port}/`)
+console.log(`oi-sving LAN server on http://localhost:${server.port}/`)
+console.log(`serving ${STATIC_ROOT}`)
 
 // Graceful shutdown so `bun build --compile` outputs exit cleanly under
 // SIGTERM (verification step 7 in the multiplayer plan).

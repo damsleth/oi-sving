@@ -103,34 +103,77 @@ OiSving.Menu = {
         });
     },
     
-    onSpaceDown: function() {
-        OiSving.players.forEach(function(player) {
-            if ( player.isActive() ) {
-                OiSving.Game.curves.push(
-                    new OiSving.Curve(player, OiSving.Game, OiSving.Field, OiSving.Config.Curve, OiSving.Sound.getAudioPlayer())
-                );    
-            }
-        });
-        
-        if (OiSving.Game.curves.length <= 1) {
-            OiSving.Game.curves = [];
-            OiSving.Menu.audioPlayer.play('menu-error', {reset: true});
+    buildGameCurves: function() {
+        OiSving.Game.curves = [];
 
-            u.addClass('shake', 'menu');
+        var localPlayerIds = [];
+        var remotePlayerIds = [];
+        var playerIds = [];
 
-            setTimeout(function() {
-                u.removeClass('shake', 'menu');
-            }, 450); //see Sass shake animation in _mixins.scss
-
-            return; //not enough players are ready
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive()) {
+            localPlayerIds = OiSving.Net.getLocalPlayerIds ? OiSving.Net.getLocalPlayerIds() : [];
+            remotePlayerIds = OiSving.Net.getRemotePlayerIds ? OiSving.Net.getRemotePlayerIds() : [];
+            playerIds = localPlayerIds.concat(remotePlayerIds).filter(function(id, index, arr) {
+                return arr.indexOf(id) === index;
+            });
+        } else {
+            OiSving.players.forEach(function(player) {
+                if ( player.isActive() ) playerIds.push(player.getId());
+            });
         }
 
+        playerIds.forEach(function(playerId) {
+            var player = OiSving.getPlayer(playerId);
+            if (!player) return;
+            player.isLocal = remotePlayerIds.indexOf(playerId) < 0 || localPlayerIds.indexOf(playerId) >= 0;
+            OiSving.Game.curves.push(
+                new OiSving.Curve(player, OiSving.Game, OiSving.Field, OiSving.Config.Curve, OiSving.Sound.getAudioPlayer())
+            );
+        });
+
+        return OiSving.Game.curves.length;
+    },
+
+    showNotEnoughPlayersError: function() {
+        OiSving.Game.curves = [];
+        OiSving.Menu.audioPlayer.play('menu-error', {reset: true});
+
+        u.addClass('shake', 'menu');
+
+        setTimeout(function() {
+            u.removeClass('shake', 'menu');
+        }, 450); //see Sass shake animation in _mixins.scss
+    },
+
+    startGameFromMenu: function() {
         OiSving.Field.init();
         OiSving.Menu.audioPlayer.pause('menu-music', {fade: 1000});
         OiSving.Game.startGame();
 
         u.addClass('hidden', 'layer-menu');
         u.removeClass('hidden', 'layer-game');
+    },
+
+    startNetworkGameFromRoster: function() {
+        if (OiSving.Game.curves.length === 0) {
+            this.buildGameCurves();
+        }
+        if (OiSving.Game.curves.length <= 1) {
+            return false;
+        }
+        this.startGameFromMenu();
+        return true;
+    },
+
+    onSpaceDown: function() {
+        this.buildGameCurves();
+        
+        if (OiSving.Game.curves.length <= 1) {
+            this.showNotEnoughPlayersError();
+            return; //not enough players are ready
+        }
+
+        this.startGameFromMenu();
     },
 
     onNextSuperPowerClicked: function(event, playerId) {

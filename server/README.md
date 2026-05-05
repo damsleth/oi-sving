@@ -1,33 +1,38 @@
-# Oi, Sving! signaling
+# Oi, Sving! LAN signaling
 
-Two deployment options. Both speak the same JSON message protocol over a
-single WebSocket so the browser client doesn't care which one is on the
-other side.
+For local LAN multiplayer, use `server/signaling-server.ts`. It serves the browser
+game over HTTP and speaks the JSON signaling protocol over WebSocket on the same
+host and port.
 
-## 1. Self-host on a Bun runtime
+## Self-host on a Bun runtime
 
 Local dev (no install required):
 
 ```sh
-bun run server/signaling-node.ts
+bun run server/signaling-server.ts
 ```
+
+Open `http://localhost:8787/` on the host machine. Other players on the LAN open
+`http://<host-lan-ip>:8787/`.
 
 Compile to a standalone executable:
 
 ```sh
-bun build --compile --outfile=oi-sving-signaling server/signaling-node.ts
-./oi-sving-signaling
+bun run build:standalone
+./dist/server/oi-sving-signaling
 ```
 
-The executable opens `ws://0.0.0.0:8787/` by default. Override with
-`PORT=…`. `GET /health` returns a tiny JSON heartbeat for monitoring.
+The executable binds to `0.0.0.0:8787` by default. Override with `BIND_HOST=…`
+or `PORT=…`. It serves static files from the current working directory by
+default; override with `OISVING_STATIC_ROOT=…`. `GET /health` returns a tiny JSON
+heartbeat for monitoring.
 
 The signaling server is purely a rendezvous: hosts mint a 4-character
 room code, joiners exchange it out-of-band, and the server brokers SDP +
 ICE between host and joiners. Once datachannels are open, signaling is
 no longer on the gameplay data path.
 
-## 2. Cloudflare Workers + Durable Objects
+## Cloudflare Workers + Durable Objects
 
 `server/signaling-worker.ts` is the deployable Worker entrypoint.
 `server/signaling-room.ts` is a Durable Object that owns one room each

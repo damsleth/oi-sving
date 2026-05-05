@@ -72,9 +72,9 @@ OiSving.Config = {
     },
 
     Net: {
-        // WebSocket rendezvous URL. Override at runtime to point at a
-        // self-hosted signaling server.
-        signalingUrl: 'wss://signaling.oi-sving.local/',
+        // WebSocket rendezvous URL. Null means "use this page's origin",
+        // which is the LAN-friendly default for the standalone server.
+        signalingUrl: null,
         // STUN servers used for ICE candidate gathering. Public Google
         // STUN works for most home-network NAT cases. TURN intentionally
         // out of MVP scope — config a `turnServers` array later if needed.

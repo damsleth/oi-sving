@@ -1,6 +1,7 @@
-// Bun build entry point. Module load order matches the legacy Gulp source list
-// in gulpfile.js, so OiSving namespace augmentation happens in the same
-// sequence the original concatenated bundle expected.
+// Bun build entry point. Each module augments the shared OiSving namespace,
+// and several modules depend on others having registered their slot first
+// (e.g. Game reads from Field, Curve reads from Superpower). Keep the order
+// below stable.
 
 import './window'
 import { OiSving } from './namespace'

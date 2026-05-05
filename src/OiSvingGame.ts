@@ -64,6 +64,20 @@ OiSving.Game = {
         // lockstep symmetry.
         installKeyboardProvider(this);
 
+        if (OiSving.Net && OiSving.Net.on) {
+            OiSving.Net.on('round-start', function() {
+                if (OiSving.Net.isHost && OiSving.Net.isHost()) return;
+                if (OiSving.Game.isRoundStarted || OiSving.Game.isRunning) return;
+
+                if (OiSving.Game.curves.length === 0) {
+                    var didStartGame = OiSving.Menu.startNetworkGameFromRoster && OiSving.Menu.startNetworkGameFromRoster();
+                    if (!didStartGame) return;
+                }
+
+                OiSving.Game.startNewRound();
+            });
+        }
+
         this.Audio.init();
     },
 
@@ -225,12 +239,31 @@ OiSving.Game = {
         this.startRun();
     },
     
+    showPressSpaceOverlay: function() {
+        u.removeClass('hidden', 'press-space-overlay');
+    },
+
+    hidePressSpaceOverlay: function() {
+        u.addClass('hidden', 'press-space-overlay');
+    },
+
+    randomSeed: function() {
+        var cryptoObj = window.crypto || window.msCrypto;
+        if (cryptoObj && cryptoObj.getRandomValues) {
+            var values = new Uint32Array(1);
+            cryptoObj.getRandomValues(values);
+            return values[0] >>> 0;
+        }
+        return Math.floor(Math.random() * 0x100000000) >>> 0;
+    },
+
     startGame: function() {
         this.maxPoints = (this.curves.length - 1) * 10;
-        
+
         this.addPlayers();
         this.addWindowListeners();
         this.renderPlayerScores();
+        this.showPressSpaceOverlay();
 
         OiSving.Piwik.trackPageVariable(1, 'theme', OiSving.Theming.currentTheme);
         OiSving.Piwik.trackPageVariable(2, 'number_of_players', this.players.length);
@@ -290,6 +323,16 @@ OiSving.Game = {
         this.isRoundStarted = true;
         this.CURRENT_FRAME_ID = 0;
 
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost()) {
+            OiSving.Net.startRound(
+                this.randomSeed(),
+                OiSving.Config.Net.arenaWidth,
+                OiSving.Config.Net.arenaHeight,
+                this.CURRENT_FRAME_ID
+            );
+        }
+
+        this.hidePressSpaceOverlay();
         OiSving.Field.clearFieldContent();
         this.initRun();
         this.renderPlayerScores();
@@ -336,6 +379,9 @@ OiSving.Game = {
         this.Audio.terminateRound();
         OiSving.Field.resize();
         this.checkForWinner();
+        if (!this.isGameOver && !this.deathMatch) {
+            this.showPressSpaceOverlay();
+        }
     },
 
     incrementSuperpowers: function() {

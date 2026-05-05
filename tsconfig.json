@@ -23,8 +23,7 @@
     "outDir": "./dist/types",
     "rootDir": ".",
     "declaration": false,
-    "noEmit": true,
-    "types": ["bun-types"]
+    "noEmit": true
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "server/**/*.ts"],
   "exclude": ["node_modules", "dist", ".plans"]

@@ -36,9 +36,6 @@ import {
   setInputProvider,
 } from './input-provider'
 
-// Lightweight type alias matching the union used by RTCDataChannel.send().
-type DataPayload = ArrayBuffer | ArrayBufferView | string | Blob
-
 const MSG_START = 0x01
 const MSG_INPUT = 0x02
 const MSG_PING = 0x03
@@ -86,7 +83,7 @@ interface PeerSlot {
   control: RTCDataChannel | null
   input: RTCDataChannel | null
   playerId: string
-  outboundQueue: DataPayload[]
+  outboundQueue: Array<{ channel: 'control' | 'input'; msg: ArrayBuffer }>
 }
 
 // Buffered per-(frame, playerId) input bitfield. The input channel is
@@ -146,10 +143,12 @@ let roomCode: string | null = null
 let isHost = false
 let localPeerId = ''
 const peers = new Map<string, PeerSlot>()
+const remotePlayerIdsByPeer = new Map<string, string[]>()
 const events = new EventBus()
 let inputBuffer = new InputBuffer()
 let netProvider: NetInputProvider | null = null
 let connectionState: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed' = 'idle'
+let localPlayerIds: string[] = []
 
 function setConnState(s: typeof connectionState) {
   connectionState = s
@@ -160,15 +159,42 @@ function genPeerId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
 
+function normalizePlayerIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const allowed = new Set(PLAYER_ID_TABLE)
+  return [...new Set(value.map(v => String(v)).filter(id => allowed.has(id)))]
+}
+
+function getActivePlayerIds(): string[] {
+  return (OiSving.players ?? [])
+    .filter((p: { isActive?: () => boolean }) => p.isActive?.())
+    .map((p: { getId: () => string }) => p.getId())
+}
+
+function requireLocalPlayerIds(): string[] {
+  const ids = getActivePlayerIds()
+  if (ids.length === 0) throw new Error('activate at least one player first')
+  return ids
+}
+
 function getNetConfig() {
-  return OiSving.Config?.Net ?? {
-    signalingUrl: 'ws://localhost:8787/',
+  const sameOriginSignalingUrl = () => {
+    if (typeof window === 'undefined' || !window.location) return 'ws://localhost:8787/'
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${window.location.host}/`
+  }
+  const cfg = OiSving.Config?.Net ?? {
+    signalingUrl: null,
     stunServers: ['stun:stun.l.google.com:19302'],
     inputDelayFrames: 2,
     inputRedundancyFrames: 4,
     maxPeers: 6,
     arenaWidth: 1280,
     arenaHeight: 720,
+  }
+  return {
+    ...cfg,
+    signalingUrl: cfg.signalingUrl || sameOriginSignalingUrl(),
   }
 }
 
@@ -312,9 +338,13 @@ function attachDataChannel(slot: PeerSlot, ch: RTCDataChannel, label: 'control' 
 }
 
 function flushOutbound(slot: PeerSlot): void {
-  if (!slot.input || slot.input.readyState !== 'open') return
-  for (const m of slot.outboundQueue) slot.input.send(m as ArrayBuffer)
-  slot.outboundQueue.length = 0
+  const remaining: PeerSlot['outboundQueue'] = []
+  for (const item of slot.outboundQueue) {
+    const ch = item.channel === 'control' ? slot.control : slot.input
+    if (ch && ch.readyState === 'open') ch.send(item.msg)
+    else remaining.push(item)
+  }
+  slot.outboundQueue = remaining
 }
 
 function broadcast(channel: 'control' | 'input', msg: ArrayBuffer): void {
@@ -322,8 +352,8 @@ function broadcast(channel: 'control' | 'input', msg: ArrayBuffer): void {
     const ch = channel === 'control' ? slot.control : slot.input
     if (ch && ch.readyState === 'open') {
       ch.send(msg)
-    } else if (channel === 'input') {
-      slot.outboundQueue.push(msg)
+    } else {
+      slot.outboundQueue.push({ channel, msg })
     }
   }
 }
@@ -345,25 +375,41 @@ OiSving.Net = {
     return roomCode
   },
 
+  getLocalPlayerIds(): string[] {
+    return localPlayerIds.length > 0 ? [...localPlayerIds] : getActivePlayerIds()
+  },
+
+  getRemotePlayerIds(): string[] {
+    return [...new Set([...remotePlayerIdsByPeer.values()].flat())]
+  },
+
   on<E extends EventName>(name: E, fn: NetEvents[E]): () => void {
     return events.on(name, fn)
   },
 
   async host(): Promise<string> {
     const cfg = getNetConfig()
+    localPlayerIds = requireLocalPlayerIds()
+    remotePlayerIdsByPeer.clear()
     isHost = true
     localPeerId = genPeerId()
     signalingSocket = openSignaling(cfg.signalingUrl)
     return new Promise<string>((resolve, reject) => {
       const ws = signalingSocket!
       ws.addEventListener('open', () => {
-        ws.send(JSON.stringify({ type: 'host', peerId: localPeerId }))
+        ws.send(JSON.stringify({ type: 'host', peerId: localPeerId, playerIds: localPlayerIds }))
       })
       ws.addEventListener('message', async evt => {
         const data = JSON.parse(typeof evt.data === 'string' ? evt.data : new TextDecoder().decode(evt.data))
         if (data.type === 'hosted') {
           roomCode = data.code
           resolve(roomCode!)
+        } else if (data.type === 'peer-joined') {
+          const playerIds = normalizePlayerIds(data.playerIds)
+          remotePlayerIdsByPeer.set(data.peerId, playerIds)
+          for (const playerId of playerIds) {
+            events.emit('player-joined', { peerId: data.peerId, playerId, isLocal: false })
+          }
         } else if (data.type === 'offer') {
           await handleOffer(data.from, data.sdp, ws)
         } else if (data.type === 'ice') {
@@ -379,6 +425,8 @@ OiSving.Net = {
 
   async join(code: string): Promise<void> {
     const cfg = getNetConfig()
+    localPlayerIds = requireLocalPlayerIds()
+    remotePlayerIdsByPeer.clear()
     isHost = false
     localPeerId = genPeerId()
     roomCode = code
@@ -386,11 +434,16 @@ OiSving.Net = {
     return new Promise<void>((resolve, reject) => {
       const ws = signalingSocket!
       ws.addEventListener('open', () => {
-        ws.send(JSON.stringify({ type: 'join', code, peerId: localPeerId }))
+        ws.send(JSON.stringify({ type: 'join', code, peerId: localPeerId, playerIds: localPlayerIds }))
       })
       ws.addEventListener('message', async evt => {
         const data = JSON.parse(typeof evt.data === 'string' ? evt.data : new TextDecoder().decode(evt.data))
         if (data.type === 'joined') {
+          const hostPlayerIds = normalizePlayerIds(data.hostPlayerIds)
+          remotePlayerIdsByPeer.set(data.hostId, hostPlayerIds)
+          for (const playerId of hostPlayerIds) {
+            events.emit('player-joined', { peerId: data.hostId, playerId, isLocal: false })
+          }
           await initiateConnection(data.hostId, ws)
           resolve()
         } else if (data.type === 'answer') {

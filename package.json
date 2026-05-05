@@ -15,14 +15,19 @@
     "build:css": "bun x sass scss/main.scss dist/css/main.css --no-source-map --quiet-deps",
     "build:images": "mkdir -p dist/images && cp -R images/. dist/images/",
     "build:sound": "mkdir -p dist/sound && cp -R sound/. dist/sound/",
-    "build": "bun run build:js && bun run build:css && bun run build:images && bun run build:sound",
+    "build:manifest": "bun run scripts/generate-asset-manifest.ts",
+    "build:signaling": "bun run scripts/compile-signaling.ts",
+    "build:standalone": "bun run build && bun run build:signaling",
+    "build": "bun run build:js && bun run build:css && bun run build:images && bun run build:sound && bun run build:manifest",
     "dist": "bun run clean && bun run typecheck && bun run test && bun run build",
+    "test:e2e:webrtc": "bun run scripts/e2e-webrtc-smoke.ts",
+    "test:e2e:webrtc:long": "bun run scripts/e2e-webrtc-smoke-long.ts",
     "release": "bun run dist",
     "typecheck": "bun x tsc --noEmit",
     "test": "bun test",
     "watch:js": "bun build src/main.ts --outfile=dist/js/oisving.min.js --target=browser --sourcemap=linked --watch",
     "watch:css": "bun x sass scss/main.scss dist/css/main.css --watch --no-source-map --quiet-deps",
-    "serve": "bun x serve -l 3000 ."
+    "serve": "bun run server/signaling-server.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",
