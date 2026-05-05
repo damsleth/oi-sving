@@ -87,6 +87,27 @@ Override port or bind host as needed:
 BIND_HOST=0.0.0.0 PORT=9000 ./dist/server/oi-sving-signaling
 ```
 
+### Prebuilt downloads
+
+Tagged releases publish the standalone binary for every supported platform on the [Releases page](https://github.com/damsleth/oi-sving/releases). Pick the archive that matches your OS/arch, extract, and run:
+
+| Platform | Asset suffix |
+|----------|--------------|
+| Linux x64 (modern CPU) | `linux-x64.tar.gz` |
+| Linux x64 (older CPU, no AVX2) | `linux-x64-baseline.tar.gz` |
+| Linux arm64 | `linux-arm64.tar.gz` |
+| macOS Intel | `darwin-x64.tar.gz` |
+| macOS Apple Silicon | `darwin-arm64.tar.gz` |
+| Windows x64 | `windows-x64.zip` |
+
+Each release also ships a `SHA256SUMS.txt` file. Verify with `shasum -a 256 -c SHA256SUMS.txt` before running.
+
+Maintainers cut a release by tagging `vX.Y.Z` and pushing the tag - GitHub Actions cross-compiles every target via `bun run build:release` and uploads the archives. Local cross-compile is the same command:
+
+```sh
+bun run build:release   # writes dist/server/release/<target>/oi-sving-signaling
+```
+
 ## Cloudflare Workers
 
 If you'd rather run signaling on the edge, `server/signaling-worker.ts` + `server/signaling-room.ts` are a deployable Worker + Durable Object pair. See `server/README.md` for the `wrangler.toml` snippet and deploy steps. After deploy:

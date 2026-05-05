@@ -1,0 +1,118 @@
+name: release
+
+# Cross-compile the standalone signaling binary for every platform we publish
+# and attach the artifacts to a GitHub Release. Triggered by pushing a tag of
+# the form vX.Y.Z, or manually via the Actions tab.
+#
+# Each archive contains a single `oi-sving-signaling` (or .exe) binary with
+# the browser bundle, CSS, sounds, images, and index.html embedded inside.
+# Run it on a clean machine with no extra files: `./oi-sving-signaling`, then
+# open http://localhost:8787.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag/version to use as the release name (e.g. v1.6.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build standalone binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+      - name: Build browser assets and cross-compile binaries
+        run: bun run build:release
+
+      - name: Package archives
+        id: package
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release-archives
+          tag_name="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          if [[ -z "$tag_name" ]]; then tag_name="dev-$(date +%Y%m%d%H%M%S)"; fi
+          echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
+
+          cd dist/server/release
+          for dir in */; do
+            target="${dir%/}"
+            archive_base="oi-sving-signaling-${tag_name}-${target}"
+            if [[ "$target" == windows-* ]]; then
+              (cd "$dir" && zip -9 "../../release-archives/${archive_base}.zip" "oi-sving-signaling.exe")
+            else
+              tar -C "$dir" -czf "../../release-archives/${archive_base}.tar.gz" "oi-sving-signaling"
+            fi
+          done
+
+          cd ../../release-archives
+          shasum -a 256 * > SHA256SUMS.txt
+          ls -la
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oi-sving-signaling-${{ steps.package.outputs.tag }}
+          path: dist/release-archives/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/release-archives/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body: |
+            Standalone single-file Bun executables of the Oi, Sving! LAN signaling/asset server.
+
+            Each archive contains one `oi-sving-signaling` (or `.exe`) with the browser bundle,
+            CSS, sounds, images, and `index.html` embedded inside. No external files needed.
+
+            ## Usage
+
+            Linux/macOS:
+            ```sh
+            tar -xzf oi-sving-signaling-${{ github.ref_name }}-<platform>.tar.gz
+            ./oi-sving-signaling
+            ```
+
+            Windows:
+            ```powershell
+            Expand-Archive oi-sving-signaling-${{ github.ref_name }}-windows-x64.zip
+            .\oi-sving-signaling.exe
+            ```
+
+            Then open http://localhost:8787. Override port or bind host with
+            `BIND_HOST=0.0.0.0 PORT=9000 ./oi-sving-signaling`.
+
+            ## Verify
+
+            `SHA256SUMS.txt` is included alongside the archives:
+            ```sh
+            shasum -a 256 -c SHA256SUMS.txt
+            ```
