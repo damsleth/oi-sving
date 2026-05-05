@@ -1,37 +1,38 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Theming = {
+OiSving.Theming = {
     currentTheme: 'dark',
 
     init: function() {
-        if (Kurve.Storage.has('kurve.theme')) {
-            this.currentTheme = Kurve.Storage.get('kurve.theme');
+        var migrated = OiSving.Storage.getWithMigration('oisving.theme', 'kurve.theme');
+        if (migrated !== null) {
+            this.currentTheme = migrated;
         } else {
-            Kurve.Storage.set('kurve.theme', this.currentTheme);
+            OiSving.Storage.set('oisving.theme', this.currentTheme);
         }
 
         if (this.currentTheme === 'default') {
@@ -44,8 +45,8 @@ Kurve.Theming = {
     },
 
     getThemedValue: function(section, value) {
-        if (Kurve.Config['Theming'][this.currentTheme] !== undefined) {
-            return Kurve.Config['Theming'][this.currentTheme][section][value];
+        if (OiSving.Config['Theming'][this.currentTheme] !== undefined) {
+            return OiSving.Config['Theming'][this.currentTheme][section][value];
         }
     },
 
@@ -54,7 +55,7 @@ Kurve.Theming = {
         u.addClass(theme + '-theme', 'app');
 
         this.currentTheme = theme;
-        Kurve.Storage.set('kurve.theme', this.currentTheme);
+        OiSving.Storage.set('oisving.theme', this.currentTheme);
     },
 
     toggleTheme: function() {

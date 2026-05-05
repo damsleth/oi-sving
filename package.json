@@ -1,13 +1,13 @@
 {
-  "name": "kurve",
+  "name": "oisving",
   "version": "1.5.1",
-  "description": "Achtung, die Kurve HTML5 version",
+  "description": "Oi, Sving! - HTML5 multiplayer take on Achtung, die Kurve!",
   "repository": {
     "type": "git",
-    "url": "https://github.com/maechler/kurve/"
+    "url": "https://github.com/damsleth/oi-sving/"
   },
-  "author": "Markus Mächler",
-  "license": "GPL3",
+  "author": "Oi, Sving! contributors. Forked from Markus Mächler (https://github.com/maechler/kurve)",
+  "license": "GPL-3.0",
   "devDependencies": {
     "gulp": "^4.0.2",
     "gulp-concat-util": "^0.5.5",

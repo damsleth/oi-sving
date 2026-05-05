@@ -1,5 +1,4 @@
 /**
- * @license
  *
  * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
@@ -25,8 +24,25 @@
 
 'use strict';
 
-window.requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
-                               window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+OiSving.Factory = {
 
-//See https://github.com/latusinski/polyfill-array-includes
-Array.prototype.includes||Object.defineProperty(Array.prototype,"includes",{value:function(r,e){if(null==this)throw new TypeError('"this" is null or not defined');var t=Object(this),n=t.length>>>0;if(0===n)return!1;var i,o,a=0|e,u=Math.max(0<=a?a:n-Math.abs(a),0);for(;u<n;){if((i=t[u])===(o=r)||"number"==typeof i&&"number"==typeof o&&isNaN(i)&&isNaN(o))return!0;u++}return!1}});
+    getSuperpower: function(type) {
+        if ( !OiSving.Superpowerconfig.hasOwnProperty(type) ) throw 'Superpower type ' + type + ' is not yet registered.';
+        
+        var hooks = OiSving.Superpowerconfig[type].hooks;
+        var act = OiSving.Superpowerconfig[type].act;
+        var init = OiSving.Superpowerconfig[type].init;
+        var close = OiSving.Superpowerconfig[type].close;
+        var helpers = {};
+        var audioPlayer = OiSving.Sound.getAudioPlayer();
+
+        for (var attribute in OiSving.Superpowerconfig[type].helpers) {
+            if (OiSving.Superpowerconfig[type].helpers.hasOwnProperty(attribute)) {
+                helpers[attribute] = OiSving.Superpowerconfig[type].helpers[attribute];
+            }
+        }
+
+        return new OiSving.Superpower(hooks, act, helpers, type, init, close, audioPlayer);
+    }
+
+};

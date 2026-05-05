@@ -1,30 +1,30 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Field = {
+OiSving.Field = {
     
     canvas: null,
     pixiApp: null,
@@ -54,7 +54,7 @@ Kurve.Field = {
 
     initWindow: function() {
         window.addEventListener('resize', function() {
-            if (Kurve.Game.isRoundStarted) {
+            if (OiSving.Game.isRoundStarted) {
                 return; // Do not allow resize during a round
             }
 
@@ -92,8 +92,8 @@ Kurve.Field = {
     },
 
     initDrawing: function() {
-        this.defaultLineWidth = Kurve.Config.Field.defaultLineWidth;
-        this.drawnPixelPrecision = Kurve.Config.Field.drawnPixelPrecision;
+        this.defaultLineWidth = OiSving.Config.Field.defaultLineWidth;
+        this.drawnPixelPrecision = OiSving.Config.Field.drawnPixelPrecision;
     },
 
     resize: function() {
@@ -101,7 +101,7 @@ Kurve.Field = {
         document.body.style.height = window.innerHeight + 'px';
         document.body.style.width = window.innerWidth + 'px';
 
-        this.width = window.innerWidth * Kurve.Config.Field.width;
+        this.width = window.innerWidth * OiSving.Config.Field.width;
         this.height = window.innerHeight;
         this.canvas.width = this.width;
         this.canvas.height = this.height;
@@ -119,7 +119,7 @@ Kurve.Field = {
     },
 
     drawField: function() {
-        var borderColor = u.stringToHex(Kurve.Theming.getThemedValue('field', 'borderColor'));
+        var borderColor = u.stringToHex(OiSving.Theming.getThemedValue('field', 'borderColor'));
 
         this.pixiField.clear();
         this.pixiField.lineStyle(2, borderColor);
@@ -127,7 +127,7 @@ Kurve.Field = {
     },
 
     drawLine: function(type, fromPointX, fromPointY, toPointX, toPointY, color, curve) {
-        if ( color === undefined ) color = Kurve.Theming.getThemedValue('field', 'defaultColor');
+        if ( color === undefined ) color = OiSving.Theming.getThemedValue('field', 'defaultColor');
 
         if (type === 'curve') {
             this.pixiCurves.lineStyle(this.defaultLineWidth, u.stringToHex(color));
@@ -139,7 +139,7 @@ Kurve.Field = {
     },
 
     drawUntrackedPoint: function(pointX, pointY, color) {
-        if ( color === undefined ) color = Kurve.Theming.getThemedValue('field', 'defaultColor');
+        if ( color === undefined ) color = OiSving.Theming.getThemedValue('field', 'defaultColor');
 
         this.pixiCurves.beginFill(u.stringToHex(color));
         this.pixiCurves.lineStyle(0);
@@ -154,22 +154,22 @@ Kurve.Field = {
 
     clearLine: function(fromPointX, fromPointY, toPointX, toPointY) {
         var interpolatedPoints = u.interpolateTwoPoints(fromPointX, fromPointY, toPointX, toPointY);
-        var color = Kurve.Theming.getThemedValue('field', 'backgroundColor');
+        var color = OiSving.Theming.getThemedValue('field', 'backgroundColor');
 
         for( var pointX in interpolatedPoints ) {
             for( var pointY in interpolatedPoints[pointX]) {
-                var pointSurroundings = Kurve.Field.getPointSurroundings(pointX, pointY);
+                var pointSurroundings = OiSving.Field.getPointSurroundings(pointX, pointY);
 
                 for (var pointSurroundingX in pointSurroundings) {
                     for (var pointSurroundingY in pointSurroundings[pointSurroundingX]) {
-                        var pointSurroundings2 = Kurve.Field.getPointSurroundings(pointSurroundingX, pointSurroundingY);
+                        var pointSurroundings2 = OiSving.Field.getPointSurroundings(pointSurroundingX, pointSurroundingY);
 
                         for (var pointSurrounding2X in pointSurroundings2) {
                             for (var pointSurrounding2Y in pointSurroundings2[pointSurrounding2X]) {
                                 if ( this.drawnPixels[pointSurrounding2X] !== undefined && this.drawnPixels[pointSurrounding2X][pointSurrounding2Y] !== undefined ) {
                                     this.drawnPixels[pointSurrounding2X][pointSurrounding2Y] = undefined;
 
-                                    if ( Kurve.Config.Debug.fieldDrawnPixels ) {
+                                    if ( OiSving.Config.Debug.fieldDrawnPixels ) {
                                         this.pixiDebug.lineStyle(1, 0xFD379B);
                                         this.pixiDebug.drawRect(pointSurrounding2X, pointSurrounding2Y, 1, 1);
                                     }
@@ -208,10 +208,10 @@ Kurve.Field = {
         drawnMap[pointX0][pointY0] = {
             color: color,
             curve: curve,
-            frameId: Kurve.Game.CURRENT_FRAME_ID
+            frameId: OiSving.Game.CURRENT_FRAME_ID
         };
 
-        if ( Kurve.Config.Debug.fieldDrawnPixels ) {
+        if ( OiSving.Config.Debug.fieldDrawnPixels ) {
             if (type === 'curve') {
                 this.pixiDebug.lineStyle(1, 0x37FDFC);
             } else {
@@ -259,7 +259,7 @@ Kurve.Field = {
         var posX = borderPadding + Math.round( (this.width - 2*borderPadding)*Math.random() );
         var posY = borderPadding + Math.round( (this.height - 2*borderPadding)*Math.random() );
         
-        return new Kurve.Point(posX, posY);
+        return new OiSving.Point(posX, posY);
     },
 
     getPointSurroundings: function(pointX, pointY) {

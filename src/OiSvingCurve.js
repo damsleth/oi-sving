@@ -1,30 +1,30 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Curve = function(player, game, field, config, audioPlayer) {
+OiSving.Curve = function(player, game, field, config, audioPlayer) {
 
     var immunityFor = 0;  // Collision-immune frames.
     var immunityTo = [];  // Curves we are immune to.
@@ -82,31 +82,31 @@ Kurve.Curve = function(player, game, field, config, audioPlayer) {
     this.resetHoleCountDown(); //Randomize initial hole interval
 };
 
-Kurve.Curve.prototype.drawNextFrame = function() {
+OiSving.Curve.prototype.drawNextFrame = function() {
     this.moveToNextFrame();
     this.checkForCollision();
     this.drawLine(this.getField());
     this.decrementPowerUpTimeOut();
     
-    if ( this.useSuperpower(Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME) ) {
-        this.getPlayer().getSuperpower().act(Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME, this);
+    if ( this.useSuperpower(OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME) ) {
+        this.getPlayer().getSuperpower().act(OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME, this);
     }
 
-    if ( Kurve.Config.Debug.curvePosition ) {
+    if ( OiSving.Config.Debug.curvePosition ) {
         this.getField().pixiDebug.lineStyle(1, 0x000000);
         this.getField().pixiDebug.drawRect(u.round(this.getPositionX(), 0), u.round(this.getPositionY(), 0), 1, 1);
     }
 };
 
-Kurve.Curve.prototype.drawCurrentPosition = function(field) {
+OiSving.Curve.prototype.drawCurrentPosition = function(field) {
     field.drawUntrackedPoint(this.getPositionX(), this.getPositionY(), this.getPlayer().getColor());
 };
 
-Kurve.Curve.prototype.drawLine = function(field) {
+OiSving.Curve.prototype.drawLine = function(field) {
     this.setIsInvisible(this.getOptions().holeCountDown < 0);
 
-    if ( this.useSuperpower(Kurve.Superpowerconfig.hooks.DRAW_LINE) ) {
-        this.getPlayer().getSuperpower().act(Kurve.Superpowerconfig.hooks.DRAW_LINE, this);
+    if ( this.useSuperpower(OiSving.Superpowerconfig.hooks.DRAW_LINE) ) {
+        this.getPlayer().getSuperpower().act(OiSving.Superpowerconfig.hooks.DRAW_LINE, this);
     }
 
     if ( this.isInvisible() ) {
@@ -122,7 +122,7 @@ Kurve.Curve.prototype.drawLine = function(field) {
     this.getOptions().holeCountDown--;
 };
 
-Kurve.Curve.prototype.moveToNextFrame = function() {
+OiSving.Curve.prototype.moveToNextFrame = function() {
     this.computeNewAngle();
 
     this.setPositionY(this.getNextPositionY());
@@ -132,17 +132,17 @@ Kurve.Curve.prototype.moveToNextFrame = function() {
     this.setNextPositionX(this.getMovedPositionX(this.getOptions().stepLength));
 };
 
-Kurve.Curve.prototype.getMovedPositionX = function(step) {
+OiSving.Curve.prototype.getMovedPositionX = function(step) {
     return this.getNextPositionX() + step * Math.cos(this.getOptions().angle);
 };
 
-Kurve.Curve.prototype.getMovedPositionY = function(step) {
+OiSving.Curve.prototype.getMovedPositionY = function(step) {
     return this.getNextPositionY() + step * Math.sin(this.getOptions().angle);
 };
 
-Kurve.Curve.prototype.checkForCollision = function() {
-    if ( this.useSuperpower(Kurve.Superpowerconfig.hooks.IS_COLLIDED) ) {
-        var superpowerIsCollided = this.getPlayer().getSuperpower().act(Kurve.Superpowerconfig.hooks.IS_COLLIDED, this);
+OiSving.Curve.prototype.checkForCollision = function() {
+    if ( this.useSuperpower(OiSving.Superpowerconfig.hooks.IS_COLLIDED) ) {
+        var superpowerIsCollided = this.getPlayer().getSuperpower().act(OiSving.Superpowerconfig.hooks.IS_COLLIDED, this);
 
         //use === to make sure it is not null, null leads to default collision detection
         if ( superpowerIsCollided === true ) return this.die();
@@ -155,14 +155,14 @@ Kurve.Curve.prototype.checkForCollision = function() {
     outerLoop:
     for (var pointX in trace) {
         for (var pointY in trace[pointX]) {
-            var pointSurroundings = Kurve.Field.getPointSurroundings(pointX, pointY);
-            var powerUpPoint = Kurve.Field.getPowerUpPoint(pointX, pointY);
+            var pointSurroundings = OiSving.Field.getPointSurroundings(pointX, pointY);
+            var powerUpPoint = OiSving.Field.getPowerUpPoint(pointX, pointY);
 
             if ( powerUpPoint !== false && !this.isPowerUpTimeOut() && powerUpPoint.curve !== this ) {
                 var usePowerUp = true;
 
-                if ( this.useSuperpower(Kurve.Superpowerconfig.hooks.POWER_UP) ) {
-                    usePowerUp = this.getPlayer().getSuperpower().act(Kurve.Superpowerconfig.hooks.POWER_UP, this);
+                if ( this.useSuperpower(OiSving.Superpowerconfig.hooks.POWER_UP) ) {
+                    usePowerUp = this.getPlayer().getSuperpower().act(OiSving.Superpowerconfig.hooks.POWER_UP, this);
                 }
 
                 if (usePowerUp) {
@@ -178,11 +178,11 @@ Kurve.Curve.prototype.checkForCollision = function() {
                         isCollided = true;
                     }
 
-                    if (isCollided && !Kurve.Config.Debug.curveTrace) {
+                    if (isCollided && !OiSving.Config.Debug.curveTrace) {
                         break outerLoop;
                     }
 
-                    if ( Kurve.Config.Debug.curveTrace ) {
+                    if ( OiSving.Config.Debug.curveTrace ) {
                         this.getField().pixiDebug.lineStyle(1, 0x000000, 0.5);
                         this.getField().pixiDebug.drawRect(pointSurroundingX, pointSurroundingY, 1, 1);
                     }
@@ -195,7 +195,7 @@ Kurve.Curve.prototype.checkForCollision = function() {
     if ( isCollided ) this.die();
 };
 
-Kurve.Curve.prototype.isCollided = function(positionX, positionY) {
+OiSving.Curve.prototype.isCollided = function(positionX, positionY) {
     if ( this.getField().isPointOutOfBounds(positionX, positionY) ) return true;
 
     var drawnPoint = this.getField().getDrawnPoint(positionX, positionY);
@@ -207,17 +207,17 @@ Kurve.Curve.prototype.isCollided = function(positionX, positionY) {
     return true;
 };
 
-Kurve.Curve.prototype.isWithinSelfCollisionTimeout = function(frameId) {
-    return Kurve.Game.CURRENT_FRAME_ID - frameId < this.getOptions().selfCollisionTimeoutInFrames;
+OiSving.Curve.prototype.isWithinSelfCollisionTimeout = function(frameId) {
+    return OiSving.Game.CURRENT_FRAME_ID - frameId < this.getOptions().selfCollisionTimeoutInFrames;
 };
 
-Kurve.Curve.prototype.die = function() {
+OiSving.Curve.prototype.die = function() {
     this.getPlayer().getSuperpower().getAudioPlayer().pause('all', {reset: true});
     this.getAudioPlayer().play('curve-crashed', {reset: true});
     this.getGame().notifyDeath(this);
 };
 
-Kurve.Curve.prototype.computeNewAngle = function() {
+OiSving.Curve.prototype.computeNewAngle = function() {
     if ( this.getGame().isKeyDown(this.getPlayer().getKeyRight()) ) {
         this.incrementAngle();
     } else if ( this.getGame().isKeyDown(this.getPlayer().getKeyLeft()) ) {
@@ -225,28 +225,28 @@ Kurve.Curve.prototype.computeNewAngle = function() {
     }
 };
     
-Kurve.Curve.prototype.setRandomAngle = function() {
+OiSving.Curve.prototype.setRandomAngle = function() {
     this.setAngle(2 * Math.PI * Math.random());
 };
 
-Kurve.Curve.prototype.useSuperpower = function(hook) {
+OiSving.Curve.prototype.useSuperpower = function(hook) {
     if ( !this.getPlayer().getSuperpower().usesHook(hook) ) return false;
     if ( this.getPlayer().getSuperpower().isActive() ) return true;
-    if ( Kurve.Game.isKeyDown(this.getPlayer().getKeySuperpower()) && this.getPlayer().getSuperpower().getCount() > 0 ) return true;
+    if ( OiSving.Game.isKeyDown(this.getPlayer().getKeySuperpower()) && this.getPlayer().getSuperpower().getCount() > 0 ) return true;
 
     return false;
 };
 
-Kurve.Curve.prototype.resetHoleCountDown = function() {
+OiSving.Curve.prototype.resetHoleCountDown = function() {
     this.getOptions().holeCountDown = this.getOptions().holeInterval + u.round(Math.random() * this.getOptions().holeIntervalRandomness, 0);
 };
 
-Kurve.Curve.prototype.setMuted = function (soundKey, muted) {
+OiSving.Curve.prototype.setMuted = function (soundKey, muted) {
     this.getAudioPlayer().setMuted(soundKey, muted);
     this.getPlayer().getSuperpower().getAudioPlayer().setMuted(soundKey, muted);
 };
 
-Kurve.Curve.prototype.pause = function (soundKey, options) {
+OiSving.Curve.prototype.pause = function (soundKey, options) {
     this.getAudioPlayer().pause(soundKey, options);
     this.getPlayer().getSuperpower().getAudioPlayer().pause(soundKey, options);
 };

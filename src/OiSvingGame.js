@@ -1,30 +1,30 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Game = {    
+OiSving.Game = {    
     
     runIntervalId:          null,
     fps:                    null,
@@ -44,7 +44,7 @@ Kurve.Game = {
     CURRENT_FRAME_ID:       0,
     
     init: function() {
-        this.fps = Kurve.Config.Game.fps;
+        this.fps = OiSving.Config.Game.fps;
         this.intervalTimeOut = Math.round(1000 / this.fps);
         this.playerScoresElement = document.getElementById('player-scores');
 
@@ -66,14 +66,14 @@ Kurve.Game = {
     },
     
     addWindowListeners: function() {
-        Kurve.Menu.removeWindowListeners();
+        OiSving.Menu.removeWindowListeners();
         
         window.addEventListener('keydown', this.onKeyDown.bind(this));
         window.addEventListener('keyup', this.onKeyUp.bind(this));  
     },
     
     onKeyDown: function(event) {
-        if (Kurve.Menu.scrollKeys.indexOf(event.key) >= 0) {
+        if (OiSving.Menu.scrollKeys.indexOf(event.key) >= 0) {
             event.preventDefault(); //prevent page scrolling
         }
 
@@ -113,7 +113,7 @@ Kurve.Game = {
         this.isPaused = true;
         this.Audio.pauseIn();
         this.stopRun();
-        Kurve.Lightbox.show('<h2>Game is paused</h2>');
+        OiSving.Lightbox.show('<h2>Game is paused</h2>');
     },
 
     endPause: function() {
@@ -121,7 +121,7 @@ Kurve.Game = {
 
         this.isPaused = false;
         this.Audio.pauseOut();
-        Kurve.Lightbox.hide();
+        OiSving.Lightbox.hide();
         this.startRun();
     },
     
@@ -132,9 +132,9 @@ Kurve.Game = {
         this.addWindowListeners();
         this.renderPlayerScores();
 
-        Kurve.Piwik.trackPageVariable(1, 'theme', Kurve.Theming.currentTheme);
-        Kurve.Piwik.trackPageVariable(2, 'number_of_players', this.players.length);
-        Kurve.Piwik.trackPageView('Game');
+        OiSving.Piwik.trackPageVariable(1, 'theme', OiSving.Theming.currentTheme);
+        OiSving.Piwik.trackPageVariable(2, 'number_of_players', this.players.length);
+        OiSving.Piwik.trackPageView('Game');
         
         this.startNewRound.bind(this);
     },
@@ -153,12 +153,12 @@ Kurve.Game = {
     },
     
     addPlayers: function() {
-        Kurve.Game.curves.forEach(function(curve) {
-            for (var i=0; i<Kurve.Config.Game.initialSuperpowerCount; i++) {
+        OiSving.Game.curves.forEach(function(curve) {
+            for (var i=0; i<OiSving.Config.Game.initialSuperpowerCount; i++) {
                 curve.getPlayer().getSuperpower().incrementCount();
             }
 
-            Kurve.Game.players.push( curve.getPlayer() );
+            OiSving.Game.players.push( curve.getPlayer() );
         });
     },
     
@@ -190,11 +190,11 @@ Kurve.Game = {
         this.isRoundStarted = true;
         this.CURRENT_FRAME_ID = 0;
 
-        Kurve.Field.clearFieldContent();
+        OiSving.Field.clearFieldContent();
         this.initRun();
         this.renderPlayerScores();
 
-        setTimeout(this.startRun.bind(this), Kurve.Config.Game.startDelay);
+        setTimeout(this.startRun.bind(this), OiSving.Config.Game.startDelay);
         this.Audio.startNewRound();
     },
     
@@ -210,12 +210,12 @@ Kurve.Game = {
     
     initRun: function() {
         this.curves.forEach(function(curve) {
-            Kurve.Game.runningCurves[curve.getPlayer().getId()] = [curve];
+            OiSving.Game.runningCurves[curve.getPlayer().getId()] = [curve];
             
-            curve.setPosition(Kurve.Field.getRandomPosition().getPosX(), Kurve.Field.getRandomPosition().getPosY());
+            curve.setPosition(OiSving.Field.getRandomPosition().getPosX(), OiSving.Field.getRandomPosition().getPosY());
             curve.setRandomAngle();
             curve.getPlayer().getSuperpower().init(curve);
-            curve.drawCurrentPosition(Kurve.Field);
+            curve.drawCurrentPosition(OiSving.Field);
         });
     },
     
@@ -234,7 +234,7 @@ Kurve.Game = {
         this.runningCurves  = {};
         this.incrementSuperpowers();
         this.Audio.terminateRound();
-        Kurve.Field.resize();
+        OiSving.Field.resize();
         this.checkForWinner();
     },
 
@@ -262,7 +262,7 @@ Kurve.Game = {
         var winners = [];
         
         this.players.forEach(function(player) {
-            if (player.getPoints() >= Kurve.Game.maxPoints) winners.push(player);
+            if (player.getPoints() >= OiSving.Game.maxPoints) winners.push(player);
         });
         
         if (winners.length === 0) return;
@@ -273,14 +273,14 @@ Kurve.Game = {
     initDeathMatch: function(winners) {
         this.deathMatch = true;
         this.Audio.initDeathMatch();
-        Kurve.Lightbox.show('<div class="deathmatch"><h1>DEATHMATCH!</h1></div>');
+        OiSving.Lightbox.show('<div class="deathmatch"><h1>DEATHMATCH!</h1></div>');
 
         var winnerCurves = [];
         this.curves.forEach(function(curve) {
             winners.forEach(function(player){
                 if (curve.getPlayer() === player) {
                     winnerCurves.push(curve);
-                    player.setColor(Kurve.Theming.getThemedValue('field', 'deathMatchColor'));
+                    player.setColor(OiSving.Theming.getThemedValue('field', 'deathMatchColor'));
                 }
             });
         });
@@ -289,8 +289,8 @@ Kurve.Game = {
     },
     
     startDeathMatch: function(winners) {
-        Kurve.Piwik.trackPageVariable(3, 'death_match', 'yes');
-        Kurve.Lightbox.hide();
+        OiSving.Piwik.trackPageVariable(3, 'death_match', 'yes');
+        OiSving.Lightbox.hide();
         this.startNewRound();
     },
     
@@ -298,12 +298,12 @@ Kurve.Game = {
         this.isGameOver = true;
 
         this.Audio.gameOver();
-        Kurve.Piwik.trackPageVariable(4, 'finished_game', 'yes');
-        Kurve.Piwik.trackPageView('GameOver');
+        OiSving.Piwik.trackPageVariable(4, 'finished_game', 'yes');
+        OiSving.Piwik.trackPageView('GameOver');
 
-        Kurve.Lightbox.show(
+        OiSving.Lightbox.show(
             '<h1 class="active ' + winner.getId() + '">' + winner.getId() + ' wins!</h1>' +
-            '<a href="#" onclick="Kurve.reload(); return false;" title="Go back to the menu"  class="button">Start new game</a>'
+            '<a href="#" onclick="OiSving.reload(); return false;" title="Go back to the menu"  class="button">Start new game</a>'
         );
     },
 
@@ -313,11 +313,11 @@ Kurve.Game = {
         defaultFadeTime: 1000,
 
         init: function() {
-            this.audioPlayer = Kurve.Sound.getAudioPlayer();
+            this.audioPlayer = OiSving.Sound.getAudioPlayer();
         },
 
         startNewRound: function() {
-            var startIn1Delay = Kurve.Config.Game.startDelay / 3;
+            var startIn1Delay = OiSving.Config.Game.startDelay / 3;
             var startIn2Delay = 2 * startIn1Delay;
             var startOutDelay = 3 * startIn1Delay;
 
@@ -327,7 +327,7 @@ Kurve.Game = {
                 this.audioPlayer.play('game-start-out', {reset: true});
                 this.setAllCurvesMuted('all', false);
 
-                if ( Kurve.Game.deathMatch ) {
+                if ( OiSving.Game.deathMatch ) {
                     this.stemLevel = 3;
                     this.audioPlayer.play('game-music-stem-1', {fade: this.defaultFadeTime, volume: 1, background: true, loop: true, reset: true});
                     this.audioPlayer.play('game-music-stem-4', {fade: this.defaultFadeTime, volume: 1, background: true, loop: true, reset: true});
@@ -362,7 +362,7 @@ Kurve.Game = {
                 this.audioPlayer.setVolume('game-music-stem-3', {volume: 0, fade: this.defaultFadeTime});
             }
 
-            if (Kurve.Game.deathMatch) {
+            if (OiSving.Game.deathMatch) {
                 this.audioPlayer.setVolume('game-music-stem-4', {volume: 0, fade: this.defaultFadeTime});
             }
         },
@@ -380,13 +380,13 @@ Kurve.Game = {
                 this.audioPlayer.setVolume('game-music-stem-3', {volume: 0.3, fade: this.defaultFadeTime});
             }
 
-            if (Kurve.Game.deathMatch) {
+            if (OiSving.Game.deathMatch) {
                 this.audioPlayer.setVolume('game-music-stem-4', {volume: 1, fade: this.defaultFadeTime});
             }
         },
 
         tension: function() {
-            if (Kurve.Game.deathMatch) {
+            if (OiSving.Game.deathMatch) {
                 return;
             }
 
@@ -405,13 +405,13 @@ Kurve.Game = {
         },
 
         setAllCurvesMuted: function(soundKey, muted) {
-            Kurve.Game.curves.forEach(function(curve) {
+            OiSving.Game.curves.forEach(function(curve) {
                 curve.setMuted(soundKey, muted);
             });
         },
 
         pauseAllCurves: function(soundKey, options) {
-            Kurve.Game.curves.forEach(function(curve) {
+            OiSving.Game.curves.forEach(function(curve) {
                 curve.pause(soundKey, options);
             });
         }

@@ -4,37 +4,37 @@ var gulp = require('gulp'),
     sass = require('gulp-sass')(require('sass')),
     sourcemaps = require('gulp-sourcemaps');
 
-var kurveSources = [
+var oisvingSources = [
     './src/window.js',
-    './src/Kurve.js',
-    './src/KurveStorage.js',
-    './src/KurveSound.js',
-    './src/KurveTheming.js',
-    './src/KurveFactory.js',
-    './src/KurveConfig.js',
-    './src/KurveUtility.js',
-    './src/KurveMenu.js',
-    './src/KurveGame.js',
-    './src/KurveField.js',
-    './src/KurveSuperpowerconfig.js',
-    './src/KurveSuperpower.js',
-    './src/KurveCurve.js',
-    './src/KurvePoint.js',
-    './src/KurvePlayer.js',
-    './src/KurveLightbox.js',
-    './src/KurvePiwik.js',
-    './src/KurvePrivacypolicy.js',
+    './src/OiSving.js',
+    './src/OiSvingStorage.js',
+    './src/OiSvingSound.js',
+    './src/OiSvingTheming.js',
+    './src/OiSvingFactory.js',
+    './src/OiSvingConfig.js',
+    './src/OiSvingUtility.js',
+    './src/OiSvingMenu.js',
+    './src/OiSvingGame.js',
+    './src/OiSvingField.js',
+    './src/OiSvingSuperpowerconfig.js',
+    './src/OiSvingSuperpower.js',
+    './src/OiSvingCurve.js',
+    './src/OiSvingPoint.js',
+    './src/OiSvingPlayer.js',
+    './src/OiSvingLightbox.js',
+    './src/OiSvingPiwik.js',
+    './src/OiSvingPrivacypolicy.js',
 ];
 
-var kurveLibs = [
+var oisvingLibs = [
     './node_modules/pixi.js/dist/browser/pixi.js',
 ];
 
 gulp.task('js', function(done) {
-    gulp.src(kurveLibs.concat(kurveSources))
+    gulp.src(oisvingLibs.concat(oisvingSources))
         .pipe(sourcemaps.init())
         .pipe(uglify({output: { comments: 'some'}}))
-        .pipe(concat('kurve.min.js', {sep: ''}))
+        .pipe(concat('oisving.min.js', {sep: ''}))
         .pipe(sourcemaps.write('.'))
         .pipe(gulp.dest('./dist/js/'))
         .on('end', done);

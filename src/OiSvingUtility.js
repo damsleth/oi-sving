@@ -1,72 +1,72 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Utility = function(element) {
+OiSving.Utility = function(element) {
     if ( element instanceof String ) {}
 
-    return new Kurve.Utility.Element(element);
+    return new OiSving.Utility.Element(element);
 };
 
-Kurve.Utility.Element = function(element) {
+OiSving.Utility.Element = function(element) {
     this.element = element;
 };
 
-Kurve.Utility.round = function(number, digitsAfterComa) {
+OiSving.Utility.round = function(number, digitsAfterComa) {
     return Math.round(number * Math.pow(10, digitsAfterComa)) / Math.pow(10, digitsAfterComa); 
 };
 
-Kurve.Utility.addClass = function(className, elementId) {
+OiSving.Utility.addClass = function(className, elementId) {
     var element = document.getElementById(elementId);
     if (element === null) return false;
 
     element.classList.add(className);
 };
     
-Kurve.Utility.removeClass = function(className, elementId) {
+OiSving.Utility.removeClass = function(className, elementId) {
     var element = document.getElementById(elementId);
     if (element === null) return false;
 
     element.classList.remove(className);
 };
 
-Kurve.Utility.setClassName = function(className, elementId) {
+OiSving.Utility.setClassName = function(className, elementId) {
     var element = document.getElementById(elementId);
     if (element === null) return false;
 
     element.className = className;        
 };
 
-Kurve.Utility.hasClass = function(className, elementId) {
+OiSving.Utility.hasClass = function(className, elementId) {
     var element = document.getElementById(elementId);
     if (element === null) return false;
 
     return element.classList.contains(className);
 };
 
-Kurve.Utility.interpolateTwoPoints = function(fromPointX, fromPointY, toPointX, toPointY) {
+OiSving.Utility.interpolateTwoPoints = function(fromPointX, fromPointY, toPointX, toPointY) {
     var interpolatedPoints = {};
     var dX = toPointX - fromPointX;
     var dY = toPointY - fromPointY;
@@ -84,18 +84,18 @@ Kurve.Utility.interpolateTwoPoints = function(fromPointX, fromPointY, toPointX, 
     return interpolatedPoints;
 };
 
-Kurve.Utility.addPointToMap = function(array, pointX, pointY) {
+OiSving.Utility.addPointToMap = function(array, pointX, pointY) {
     var pointX0 = u.round(pointX, 0);
     if ( array[pointX0] === undefined ) array[pointX0] = {};
 
     array[pointX0][u.round(pointY, 0)] = true;
 };
 
-Kurve.Utility.stringToHex = function(string) {
+OiSving.Utility.stringToHex = function(string) {
     return parseInt(string.substring(1), 16)
 };
 
-Kurve.Utility.merge = function() {
+OiSving.Utility.merge = function() {
     var base = arguments[0];
 
     for (var i = 1; i < arguments.length; i++) {
@@ -108,17 +108,17 @@ Kurve.Utility.merge = function() {
     return base;
 };
 
-Kurve.Utility.isSafari = function () {
+OiSving.Utility.isSafari = function () {
     return !!navigator.userAgent.match(/Version\/[\d\.]+.*Safari/);
 };
 
-Kurve.Utility.isIE = function() {
+OiSving.Utility.isIE = function() {
     var userAgent = window.navigator.userAgent;
 
     return userAgent.indexOf('MSIE ') > 0 || userAgent.indexOf('Trident/') > 0;
 };
 
-Kurve.Utility.debounce = function(debouncedFunction, timeout) {
+OiSving.Utility.debounce = function(debouncedFunction, timeout) {
     var timeoutId;
 
     return function(...args) {
@@ -130,4 +130,4 @@ Kurve.Utility.debounce = function(debouncedFunction, timeout) {
     };
 };
 
-var u = Kurve.Utility;
+var u = OiSving.Utility;

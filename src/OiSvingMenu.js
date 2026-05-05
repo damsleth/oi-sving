@@ -1,30 +1,30 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Menu = {
+OiSving.Menu = {
     
     boundOnKeyDown: null,
     audioPlayer: null,
@@ -40,7 +40,7 @@ Kurve.Menu = {
     initPlayerMenu: function() {
         var playerHTML = '';
         
-        Kurve.players.forEach(function(player) {
+        OiSving.players.forEach(function(player) {
             playerHTML += player.renderMenuItem();
         });
         
@@ -61,7 +61,7 @@ Kurve.Menu = {
     },
 
     initMenuMusic: function() {
-        this.audioPlayer = Kurve.Sound.getAudioPlayer();
+        this.audioPlayer = OiSving.Sound.getAudioPlayer();
         this.audioPlayer.play('menu-music', {loop: true, background: true, fade: 2000, volume: 1});
     },
     
@@ -70,8 +70,8 @@ Kurve.Menu = {
     },
 
     onPlayerItemClicked: function(event) {
-        Kurve.Menu.audioPlayer.play('menu-navigate');
-        Kurve.Menu.togglePlayerActivation(this.id);
+        OiSving.Menu.audioPlayer.play('menu-navigate');
+        OiSving.Menu.togglePlayerActivation(this.id);
     },
     
     onKeyDown: function(event) {
@@ -79,40 +79,40 @@ Kurve.Menu = {
             return; //Command or Ctrl pressed
         }
 
-        if (Kurve.Menu.scrollKeys.indexOf(event.key) >= 0) {
+        if (OiSving.Menu.scrollKeys.indexOf(event.key) >= 0) {
             event.preventDefault(); //prevent page scrolling
         }
 
         if (event.keyCode === 32) {
-            Kurve.Menu.onSpaceDown();
+            OiSving.Menu.onSpaceDown();
         }
 
-        Kurve.players.forEach(function(player) {
+        OiSving.players.forEach(function(player) {
             if ( player.isKeyLeft(event.keyCode) ) {
-                Kurve.Menu.activatePlayer(player.getId());
-                Kurve.Menu.audioPlayer.play('menu-navigate');
+                OiSving.Menu.activatePlayer(player.getId());
+                OiSving.Menu.audioPlayer.play('menu-navigate');
             } else if ( player.isKeyRight(event.keyCode) ) {
-                Kurve.Menu.deactivatePlayer(player.getId());
-                Kurve.Menu.audioPlayer.play('menu-navigate');
+                OiSving.Menu.deactivatePlayer(player.getId());
+                OiSving.Menu.audioPlayer.play('menu-navigate');
             } else if ( player.isKeySuperpower(event.keyCode) ) {
-                Kurve.Menu.nextSuperpower(player.getId());
-                Kurve.Menu.audioPlayer.play('menu-navigate');
+                OiSving.Menu.nextSuperpower(player.getId());
+                OiSving.Menu.audioPlayer.play('menu-navigate');
             }
         });
     },
     
     onSpaceDown: function() {
-        Kurve.players.forEach(function(player) {
+        OiSving.players.forEach(function(player) {
             if ( player.isActive() ) {
-                Kurve.Game.curves.push(
-                    new Kurve.Curve(player, Kurve.Game, Kurve.Field, Kurve.Config.Curve, Kurve.Sound.getAudioPlayer())
+                OiSving.Game.curves.push(
+                    new OiSving.Curve(player, OiSving.Game, OiSving.Field, OiSving.Config.Curve, OiSving.Sound.getAudioPlayer())
                 );    
             }
         });
         
-        if (Kurve.Game.curves.length <= 1) {
-            Kurve.Game.curves = [];
-            Kurve.Menu.audioPlayer.play('menu-error', {reset: true});
+        if (OiSving.Game.curves.length <= 1) {
+            OiSving.Game.curves = [];
+            OiSving.Menu.audioPlayer.play('menu-error', {reset: true});
 
             u.addClass('shake', 'menu');
 
@@ -123,9 +123,9 @@ Kurve.Menu = {
             return; //not enough players are ready
         }
 
-        Kurve.Field.init();
-        Kurve.Menu.audioPlayer.pause('menu-music', {fade: 1000});
-        Kurve.Game.startGame();
+        OiSving.Field.init();
+        OiSving.Menu.audioPlayer.pause('menu-music', {fade: 1000});
+        OiSving.Game.startGame();
 
         u.addClass('hidden', 'layer-menu');
         u.removeClass('hidden', 'layer-game');
@@ -133,81 +133,81 @@ Kurve.Menu = {
 
     onNextSuperPowerClicked: function(event, playerId) {
         event.stopPropagation();
-        Kurve.Menu.audioPlayer.play('menu-navigate');
-        Kurve.Menu.nextSuperpower(playerId);
+        OiSving.Menu.audioPlayer.play('menu-navigate');
+        OiSving.Menu.nextSuperpower(playerId);
     },
 
     onPreviousSuperPowerClicked: function(event, playerId) {
         event.stopPropagation();
-        Kurve.Menu.audioPlayer.play('menu-navigate');
-        Kurve.Menu.previousSuperpower(playerId);
+        OiSving.Menu.audioPlayer.play('menu-navigate');
+        OiSving.Menu.previousSuperpower(playerId);
     },
 
     nextSuperpower: function(playerId) {
-        var player = Kurve.getPlayer(playerId);
+        var player = OiSving.getPlayer(playerId);
         var count = 0;
         var superpowerType = '';
 
-        for (var i in Kurve.Superpowerconfig.types) {
+        for (var i in OiSving.Superpowerconfig.types) {
             count++;
-            if ( !(Kurve.Superpowerconfig.types[i] === player.getSuperpower().getType() ) ) continue;
+            if ( !(OiSving.Superpowerconfig.types[i] === player.getSuperpower().getType() ) ) continue;
 
-            if ( Object.keys(Kurve.Superpowerconfig.types).length === count) {
-                superpowerType = Object.keys(Kurve.Superpowerconfig.types)[0];
+            if ( Object.keys(OiSving.Superpowerconfig.types).length === count) {
+                superpowerType = Object.keys(OiSving.Superpowerconfig.types)[0];
             } else {
-                superpowerType = Object.keys(Kurve.Superpowerconfig.types)[count];
+                superpowerType = Object.keys(OiSving.Superpowerconfig.types)[count];
             }
 
             break;
         }
 
-        player.setSuperpower( Kurve.Factory.getSuperpower(superpowerType) );
+        player.setSuperpower( OiSving.Factory.getSuperpower(superpowerType) );
     },
 
     previousSuperpower: function(playerId) {
-        var player = Kurve.getPlayer(playerId);
+        var player = OiSving.getPlayer(playerId);
         var count = 0;
         var superpowerType = '';
 
-        for (var i in Kurve.Superpowerconfig.types) {
+        for (var i in OiSving.Superpowerconfig.types) {
             count++;
-            if ( !(Kurve.Superpowerconfig.types[i] === player.getSuperpower().getType() ) ) continue;
+            if ( !(OiSving.Superpowerconfig.types[i] === player.getSuperpower().getType() ) ) continue;
 
             if ( 1 === count) {
-                superpowerType = Object.keys(Kurve.Superpowerconfig.types)[Object.keys(Kurve.Superpowerconfig.types).length - 1];
+                superpowerType = Object.keys(OiSving.Superpowerconfig.types)[Object.keys(OiSving.Superpowerconfig.types).length - 1];
             } else {
-                superpowerType = Object.keys(Kurve.Superpowerconfig.types)[count - 2];
+                superpowerType = Object.keys(OiSving.Superpowerconfig.types)[count - 2];
             }
 
             break;
         }
 
-        player.setSuperpower( Kurve.Factory.getSuperpower(superpowerType) );
+        player.setSuperpower( OiSving.Factory.getSuperpower(superpowerType) );
     },
 
     activatePlayer: function(playerId) {
-        if ( Kurve.getPlayer(playerId).isActive() ) return;
+        if ( OiSving.getPlayer(playerId).isActive() ) return;
 
-        Kurve.getPlayer(playerId).setIsActive(true);
+        OiSving.getPlayer(playerId).setIsActive(true);
 
         u.removeClass('inactive', playerId);
         u.addClass('active', playerId);
     },
 
     deactivatePlayer: function(playerId) {
-        if ( !Kurve.getPlayer(playerId).isActive() ) return;
+        if ( !OiSving.getPlayer(playerId).isActive() ) return;
 
-        Kurve.getPlayer(playerId).setIsActive(false);
+        OiSving.getPlayer(playerId).setIsActive(false);
 
         u.removeClass('active', playerId);
         u.addClass('inactive', playerId);
     },
 
     togglePlayerActivation: function(playerId) {
-        if ( Kurve.getPlayer(playerId).isActive() ) {
-            Kurve.Menu.deactivatePlayer(playerId);
+        if ( OiSving.getPlayer(playerId).isActive() ) {
+            OiSving.Menu.deactivatePlayer(playerId);
         } else {
-            Kurve.Menu.activatePlayer(playerId);
+            OiSving.Menu.activatePlayer(playerId);
         }
     },
 

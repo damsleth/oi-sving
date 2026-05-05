@@ -1,32 +1,32 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Superpowerconfig = {};
+OiSving.Superpowerconfig = {};
 
-Kurve.Superpowerconfig.types = {
+OiSving.Superpowerconfig.types = {
     RUN_FASTER: 'RUN_FASTER',
     RUN_SLOWER: 'RUN_SLOWER',
     JUMP: 'JUMP',
@@ -43,17 +43,17 @@ Kurve.Superpowerconfig.types = {
     RANDOM: 'RANDOM',
 };
 
-Kurve.Superpowerconfig.hooks = {
+OiSving.Superpowerconfig.hooks = {
     DRAW_NEXT_FRAME: 'DRAW_NEXT_FRAME',
     DRAW_LINE: 'DRAW_LINE',
     IS_COLLIDED: 'IS_COLLIDED',
     POWER_UP: 'POWER_UP',
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.RUN_FASTER] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.RUN_FASTER] = {
     label: 'run faster',
 
-    hooks: [Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
+    hooks: [OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
 
     audios: [
         {
@@ -68,7 +68,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.RUN_FASTER] = {
            this.getAudioPlayer().play('superpower-run-faster', {fade: 500, loop: true, reset: true});
            this.decrementCount();
            this.setIsActive(true);
-           this.helpers.executionTime = 4 * Kurve.Game.fps;
+           this.helpers.executionTime = 4 * OiSving.Game.fps;
        },
        closeAct: function() {
            this.getAudioPlayer().pause('superpower-run-faster', {fade: 500});
@@ -96,10 +96,10 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.RUN_FASTER] = {
     }
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.RUN_SLOWER] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.RUN_SLOWER] = {
     label: 'run slower',
 
-    hooks: [Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
+    hooks: [OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
 
     audios: [
         {
@@ -109,13 +109,13 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.RUN_SLOWER] = {
     ],
 
     helpers: {
-        initialStepLength: Kurve.Config.Curve.stepLength,
+        initialStepLength: OiSving.Config.Curve.stepLength,
         executionTime: 0,
         initAct: function(curve) {
             this.getAudioPlayer().play('superpower-run-slower', {fade: 500, loop: true, reset: true});
             this.decrementCount();
             this.setIsActive(true);
-            this.helpers.executionTime = 6 * Kurve.Game.fps;
+            this.helpers.executionTime = 6 * OiSving.Game.fps;
             this.helpers.initialStepLength = curve.getOptions().stepLength;
 
             curve.getOptions().stepLength = this.helpers.initialStepLength / 2;
@@ -144,10 +144,10 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.RUN_SLOWER] = {
     }
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.JUMP] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.JUMP] = {
     label: 'jump',
 
-    hooks: [Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
+    hooks: [OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
 
     audios: [
         {
@@ -187,12 +187,12 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.JUMP] = {
     }
  };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.INVISIBLE] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.INVISIBLE] = {
     label: 'invisible',
 
     hooks: [
-        Kurve.Superpowerconfig.hooks.DRAW_LINE,
-        Kurve.Superpowerconfig.hooks.IS_COLLIDED
+        OiSving.Superpowerconfig.hooks.DRAW_LINE,
+        OiSving.Superpowerconfig.hooks.IS_COLLIDED
     ],
 
     audios: [
@@ -212,7 +212,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.INVISIBLE] = {
             this.getAudioPlayer().play('superpower-invisible-start');
             this.decrementCount();
             this.setIsActive(true);
-            this.helpers.executionTime = 4 * Kurve.Game.fps; //4s
+            this.helpers.executionTime = 4 * OiSving.Game.fps; //4s
         },
         closeAct: function() {
             this.getAudioPlayer().play('superpower-invisible-end');
@@ -225,14 +225,14 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.INVISIBLE] = {
     },
 
     act: function(hook, curve) {
-        if ( hook === Kurve.Superpowerconfig.hooks.DRAW_LINE ) {
+        if ( hook === OiSving.Superpowerconfig.hooks.DRAW_LINE ) {
             if ( !this.isActive() ) this.helpers.initAct.call(this);
             if ( this.helpers.executionTime < 1 ) this.helpers.closeAct.call(this);
 
             curve.setIsInvisible(true);
 
             this.helpers.executionTime--;
-        } else if ( hook === Kurve.Superpowerconfig.hooks.IS_COLLIDED && this.isActive() ) {
+        } else if ( hook === OiSving.Superpowerconfig.hooks.IS_COLLIDED && this.isActive() ) {
             return false;
         }
     },
@@ -242,11 +242,11 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.INVISIBLE] = {
     }
  };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.VERTICAL_BAR] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.VERTICAL_BAR] = {
     label: 'vertical bar',
 
     hooks: [
-        Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME
+        OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME
     ],
 
     audios: [
@@ -271,7 +271,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.VERTICAL_BAR] = {
             var rightEndX = Math.cos(curve.getOptions().angle + Math.PI / 2) * this.helpers.barWidth + curve.getPositionX();
             var rightEndY = Math.sin(curve.getOptions().angle + Math.PI / 2) * this.helpers.barWidth + curve.getPositionY();
 
-            Kurve.Field.drawLine('curve', leftEndX, leftEndY, rightEndX, rightEndY, curve.getPlayer().getColor(), curve);
+            OiSving.Field.drawLine('curve', leftEndX, leftEndY, rightEndX, rightEndY, curve.getPlayer().getColor(), curve);
 
             this.getAudioPlayer().play('superpower-vertical-bar', {reset: true});
             this.decrementCount();
@@ -288,11 +288,11 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.VERTICAL_BAR] = {
     }
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.CROSS_WALLS] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.CROSS_WALLS] = {
     label: 'cross walls',
 
     hooks: [
-        Kurve.Superpowerconfig.hooks.IS_COLLIDED
+        OiSving.Superpowerconfig.hooks.IS_COLLIDED
     ],
 
     audios: [
@@ -328,10 +328,10 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.CROSS_WALLS] = {
                 posY = positionY;
             }
 
-            return new Kurve.Point(posX, posY);
+            return new OiSving.Point(posX, posY);
         },
         isPointWithSurroundingsOutOfBounds: function(curve, positionX, positionY) {
-            var pointSurroundings = Kurve.Field.getPointSurroundings(positionX, positionY);
+            var pointSurroundings = OiSving.Field.getPointSurroundings(positionX, positionY);
 
             for (var pointSurroundingX in pointSurroundings) {
                 for (var pointSurroundingY in pointSurroundings[pointSurroundingX]) {
@@ -367,7 +367,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.CROSS_WALLS] = {
         //isNextPointWithSurroundingsOutOfBounds => collision will be detected, if we have a superpower then deactivate collision detection
         if ( isNextPointWithSurroundingsOutOfBounds && this.getCount() > 0) {
             //if the current position is out of bounds, do make the transition
-            if ( Kurve.Field.isPointOutOfBounds(nextPositionX, nextPositionY) ) {
+            if ( OiSving.Field.isPointOutOfBounds(nextPositionX, nextPositionY) ) {
                 this.helpers.isCrossingWall = true;
                 var movedPosition = this.helpers.getWallCrossedPosition(curve);
 
@@ -388,11 +388,11 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.CROSS_WALLS] = {
     }
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.DARK_KNIGHT] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.DARK_KNIGHT] = {
     label: 'dark knight',
 
     hooks: [
-        Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME
+        OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME
     ],
 
     audios: [
@@ -412,7 +412,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.DARK_KNIGHT] = {
             this.getAudioPlayer().play('superpower-dark-knight');
             this.decrementCount();
             this.setIsActive(true);
-            this.helpers.executionTime = 3 * Kurve.Game.fps; //3s
+            this.helpers.executionTime = 3 * OiSving.Game.fps; //3s
         },
         closeAct: function() {
             u.addClass('hidden', this.helpers.darkNightDivId);
@@ -438,11 +438,11 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.DARK_KNIGHT] = {
     }
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.HYDRA] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.HYDRA] = {
     label: 'hydra',
 
     hooks: [
-        Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME
+        OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME
     ],
 
     audios: [
@@ -455,7 +455,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.HYDRA] = {
     helpers: {
         angle: 0.1 * Math.PI,
         createCopy: function(curve) {
-            var copy = new Kurve.Curve(curve.getPlayer(), curve.getGame(), curve.getField(), Kurve.Config.Curve, Kurve.Sound.getAudioPlayer());
+            var copy = new OiSving.Curve(curve.getPlayer(), curve.getGame(), curve.getField(), OiSving.Config.Curve, OiSving.Sound.getAudioPlayer());
 
             curve.setImmunity([copy], 10);
             copy.setImmunity([curve], 10);
@@ -500,9 +500,9 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.HYDRA] = {
     }
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.REVERSE] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.REVERSE] = {
     label: 'reverse',
-    hooks: [Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
+    hooks: [OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
 
     audios: [
         {
@@ -555,9 +555,9 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.REVERSE] = {
     },
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.SQUARE_HEAD] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.SQUARE_HEAD] = {
     label: 'square head',
-    hooks: [Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
+    hooks: [OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
 
     audios: [
         {
@@ -572,7 +572,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.SQUARE_HEAD] = {
         previousKeyPressed: null,
         initAct: function(curve) {
             this.helpers.dAngleInitial = curve.getOptions().dAngle;
-            this.helpers.executionTime = 6 * Kurve.Game.fps;
+            this.helpers.executionTime = 6 * OiSving.Game.fps;
 
             curve.getOptions().angle = this.helpers.getSquaredAngle(curve.getOptions().angle);
             curve.getOptions().dAngle = 0;
@@ -625,9 +625,9 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.SQUARE_HEAD] = {
     },
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.CHUCK_NORRIS] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.CHUCK_NORRIS] = {
     label: 'chuck norris',
-    hooks: [Kurve.Superpowerconfig.hooks.POWER_UP],
+    hooks: [OiSving.Superpowerconfig.hooks.POWER_UP],
     helpers: {
         initCalled: false,
         styleNode: null,
@@ -637,9 +637,9 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.CHUCK_NORRIS] = {
         this.setIsActive(true);
 
         if (!this.helpers.initCalled) {
-            var chuckNorrisColor = Kurve.Theming.getThemedValue('field', 'deathMatchColor');
+            var chuckNorrisColor = OiSving.Theming.getThemedValue('field', 'deathMatchColor');
             var styleNode = document.createElement('style');
-            var style = document.createTextNode('.' + curve.getPlayer().getId() + ' { color:' + chuckNorrisColor + ' !important; } .' + curve.getPlayer().getId() + ' .superpowerCircle { border-color: ' + Kurve.Theming.getThemedValue('player', 'superpowerColor') + ' !important; }');
+            var style = document.createTextNode('.' + curve.getPlayer().getId() + ' { color:' + chuckNorrisColor + ' !important; } .' + curve.getPlayer().getId() + ' .superpowerCircle { border-color: ' + OiSving.Theming.getThemedValue('player', 'superpowerColor') + ' !important; }');
 
             styleNode.appendChild(style);
             document.body.appendChild(styleNode);
@@ -662,9 +662,9 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.CHUCK_NORRIS] = {
     },
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.NO_SUPERPOWER] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.NO_SUPERPOWER] = {
     label: 'no superpower',
-    hooks: [Kurve.Superpowerconfig.hooks.POWER_UP],
+    hooks: [OiSving.Superpowerconfig.hooks.POWER_UP],
     audios: [],
     helpers: {},
     init: function(curve) {
@@ -676,9 +676,9 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.NO_SUPERPOWER] = {
     close: function(curve) {}
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.SHOOT_HOLES] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.SHOOT_HOLES] = {
     label: 'shoot holes',
-    hooks: [Kurve.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
+    hooks: [OiSving.Superpowerconfig.hooks.DRAW_NEXT_FRAME],
     audios: [
         {
             key: 'superpower-shoot-holes',
@@ -694,7 +694,7 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.SHOOT_HOLES] = {
             var shotPositionX = curve.getMovedPositionX(this.helpers.shotLength);
             var shotPositionY = curve.getMovedPositionY(this.helpers.shotLength);
 
-            Kurve.Field.clearLine(curve.getNextPositionX(), curve.getNextPositionY(), shotPositionX, shotPositionY);
+            OiSving.Field.clearLine(curve.getNextPositionX(), curve.getNextPositionY(), shotPositionX, shotPositionY);
             this.decrementCount();
             this.setIsActive(true);
             this.getAudioPlayer().play('superpower-shoot-holes', {reset: true});
@@ -707,15 +707,15 @@ Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.SHOOT_HOLES] = {
     close: function(curve) {}
 };
 
-Kurve.Superpowerconfig[Kurve.Superpowerconfig.types.RANDOM] = {
+OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.RANDOM] = {
     label: 'random',
     hooks: [],
     audios: [],
     helpers: {},
     init: function(curve) {
-        var superpowerTypes = Object.values(Kurve.Superpowerconfig.types).filter(type => type !== Kurve.Superpowerconfig.types.RANDOM);
+        var superpowerTypes = Object.values(OiSving.Superpowerconfig.types).filter(type => type !== OiSving.Superpowerconfig.types.RANDOM);
         var randomSuperpowerType = superpowerTypes[Math.floor(Math.random() * superpowerTypes.length)];
-        var randomSuperpower = Kurve.Factory.getSuperpower(randomSuperpowerType);
+        var randomSuperpower = OiSving.Factory.getSuperpower(randomSuperpowerType);
 
         this.label = randomSuperpower.label;
         this.hooks = randomSuperpower.hooks;

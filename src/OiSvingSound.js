@@ -1,30 +1,30 @@
 /**
  *
- * Program:     Kurve
+ * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
  * License:     http://www.gnu.org/licenses/gpl.txt
  * Link:        http://achtungkurve.com
  *
  * Copyright © 2014, 2015 Markus Mächler
  *
- * Kurve is free software: you can redistribute it and/or modify
+ * OiSving is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Kurve is distributed in the hope that it will be useful,
+ * OiSving is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Kurve.  If not, see <http://www.gnu.org/licenses/>.
+ * along with OiSving.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
 'use strict';
 
-Kurve.Sound = {
+OiSving.Sound = {
     onUserInteractionBound: null,
     muted: true,
     audios: {
@@ -95,10 +95,11 @@ Kurve.Sound = {
         this.initSuperpowerSounds();
         this.preloadAudio();
 
-        if (Kurve.Storage.has('kurve.sound.muted', 'sessionStorage')) {
-            this.muted = Kurve.Storage.get('kurve.sound.muted', 'sessionStorage');
+        var migratedMute = OiSving.Storage.getWithMigration('oisving.sound.muted', 'kurve.sound.muted', 'sessionStorage');
+        if (migratedMute !== null) {
+            this.muted = migratedMute;
         } else {
-            Kurve.Storage.set('kurve.sound.muted', this.muted, 'sessionStorage');
+            OiSving.Storage.set('oisving.sound.muted', this.muted, 'sessionStorage');
         }
 
         if (this.muted) {
@@ -109,10 +110,10 @@ Kurve.Sound = {
     },
 
     initSuperpowerSounds: function() {
-        for (var i in Kurve.Superpowerconfig.types) {
-            if ( !Array.isArray(Kurve.Superpowerconfig[i].audios) ) continue;
+        for (var i in OiSving.Superpowerconfig.types) {
+            if ( !Array.isArray(OiSving.Superpowerconfig[i].audios) ) continue;
 
-            Kurve.Superpowerconfig[i].audios.forEach(function(audio) {
+            OiSving.Superpowerconfig[i].audios.forEach(function(audio) {
                 this.audios[audio['key']] = {
                     source: audio['source']
                 }
@@ -122,7 +123,7 @@ Kurve.Sound = {
 
     preloadAudio: function() {
         for (var i in this.audios) {
-            new Audio(Kurve.Config.Sound.soundPath + this.audios[i].source);
+            new Audio(OiSving.Config.Sound.soundPath + this.audios[i].source);
         }
     },
 
@@ -148,7 +149,7 @@ Kurve.Sound = {
             return this.getStubAudioPlayer();
         }
 
-        var player = new Kurve.AudioPlayer(this.audios);
+        var player = new OiSving.AudioPlayer(this.audios);
 
         player.setMuted(this.muted);
         this.audioPlayers.push(player);
@@ -171,7 +172,7 @@ Kurve.Sound = {
             this.setButtonText('Sound on');
         }
 
-        Kurve.Storage.set('kurve.sound.muted', this.muted, 'sessionStorage');
+        OiSving.Storage.set('oisving.sound.muted', this.muted, 'sessionStorage');
     },
     
     setButtonText: function (text) {
@@ -183,11 +184,11 @@ Kurve.Sound = {
     },
 
     onCreditsCloseClicked: function () {
-        Kurve.Lightbox.hide();
+        OiSving.Lightbox.hide();
     },
 
     onCreditsClicked: function () {
-        Kurve.Lightbox.show(document.getElementById('credits').innerHTML);
+        OiSving.Lightbox.show(document.getElementById('credits').innerHTML);
     },
 
     getStubAudioPlayer: function () {
@@ -200,27 +201,27 @@ Kurve.Sound = {
     }
 };
 
-Kurve.AudioPlayer = function(audios) {
+OiSving.AudioPlayer = function(audios) {
     this.audios = audios;
     this.activeAudioMap = {};
 };
 
-Kurve.AudioPlayer.prototype.play = function(soundKey, options) {
-    var audioOptions = u.merge({}, Kurve.Sound.defaultOptions, options);
+OiSving.AudioPlayer.prototype.play = function(soundKey, options) {
+    var audioOptions = u.merge({}, OiSving.Sound.defaultOptions, options);
 
     if ( soundKey === undefined ) return;
     if ( this.audios[soundKey] === undefined ) return;
-    if ( Kurve.Sound.muted && !audioOptions['background'] ) return;
+    if ( OiSving.Sound.muted && !audioOptions['background'] ) return;
 
     if ( this.activeAudioMap[soundKey] === undefined ) {
-        this.activeAudioMap[soundKey] = new Audio(Kurve.Config.Sound.soundPath + this.audios[soundKey].source);
+        this.activeAudioMap[soundKey] = new Audio(OiSving.Config.Sound.soundPath + this.audios[soundKey].source);
     }
 
     var audio = this.activeAudioMap[soundKey];
     var restartBuffer = .25;
 
     audio.loop = audioOptions.loop;
-    audio.muted = Kurve.Sound.muted;
+    audio.muted = OiSving.Sound.muted;
     audio.volume = 0;
     audio.onended = function() {
         if ( audioOptions.resetOnEnded && audio.currentTime !== 0) {
@@ -247,12 +248,12 @@ Kurve.AudioPlayer.prototype.play = function(soundKey, options) {
     audio.play().catch(function(e) {
         if ( audioOptions.background ) {
             // User interaction required to start sound because of the browser Autoplay Policy
-            Kurve.Sound.registerUserInteractionListener(audio.play.bind(audio));
+            OiSving.Sound.registerUserInteractionListener(audio.play.bind(audio));
         }
     });
 };
 
-Kurve.AudioPlayer.prototype.pause = function(soundKey, options) {
+OiSving.AudioPlayer.prototype.pause = function(soundKey, options) {
     if ( soundKey !== 'all' && this.activeAudioMap[soundKey] === undefined ) return;
 
     if ( soundKey === 'all' ) {
@@ -260,7 +261,7 @@ Kurve.AudioPlayer.prototype.pause = function(soundKey, options) {
             this.pause(i, options);
         }
     } else {
-        var audioOptions = u.merge({}, Kurve.Sound.defaultOptions, options);
+        var audioOptions = u.merge({}, OiSving.Sound.defaultOptions, options);
         var audio = this.activeAudioMap[soundKey];
         var stopAudio = function() {
             audio.pause();
@@ -274,7 +275,7 @@ Kurve.AudioPlayer.prototype.pause = function(soundKey, options) {
     }
 };
 
-Kurve.AudioPlayer.prototype.setVolume = function(soundKey, options, callback) {
+OiSving.AudioPlayer.prototype.setVolume = function(soundKey, options, callback) {
     if ( options.volume === undefined ) return;
     if ( this.activeAudioMap[soundKey] === undefined ) return;
 
@@ -286,25 +287,25 @@ Kurve.AudioPlayer.prototype.setVolume = function(soundKey, options, callback) {
     } else {
         if ( typeof audio.fadeTimeOut !== 'undefined' ) clearTimeout(audio.fadeTimeOut);
 
-        var fadeStep = 1 / (options.fade / Kurve.Config.Sound.fadeTimeOut);
+        var fadeStep = 1 / (options.fade / OiSving.Config.Sound.fadeTimeOut);
         var fadeIn = audio.volume < options.volume;
         var fadeTimeOutFunction = function () {
             audio.volume = fadeIn ? Math.min(1, audio.volume + fadeStep) : Math.max(0, audio.volume - fadeStep);
 
             if (fadeIn && audio.volume < options.volume || !fadeIn && audio.volume > options.volume) {
                 //still fading
-                audio.fadeTimeOut = setTimeout(fadeTimeOutFunction, Kurve.Config.Sound.fadeTimeOut);
+                audio.fadeTimeOut = setTimeout(fadeTimeOutFunction, OiSving.Config.Sound.fadeTimeOut);
             } else {
                 //finished fading
                 if ( typeof callback === 'function' ) callback();
             }
         }.bind(this);
 
-        audio.fadeTimeOut = setTimeout(fadeTimeOutFunction, Kurve.Config.Sound.fadeTimeOut);
+        audio.fadeTimeOut = setTimeout(fadeTimeOutFunction, OiSving.Config.Sound.fadeTimeOut);
     }
 };
 
-Kurve.AudioPlayer.prototype.setMuted = function(soundKey, muted) {
+OiSving.AudioPlayer.prototype.setMuted = function(soundKey, muted) {
     if ( soundKey === undefined || muted === undefined ) return;
 
     if ( soundKey === 'all' ) {
