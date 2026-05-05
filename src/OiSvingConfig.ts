@@ -70,6 +70,32 @@ OiSving.Config = {
         trackerUrl: null,
         siteId: null,
     },
+
+    Net: {
+        // WebSocket rendezvous URL. Override at runtime to point at a
+        // self-hosted signaling server.
+        signalingUrl: 'wss://signaling.oi-sving.local/',
+        // STUN servers used for ICE candidate gathering. Public Google
+        // STUN works for most home-network NAT cases. TURN intentionally
+        // out of MVP scope — config a `turnServers` array later if needed.
+        stunServers: ['stun:stun.l.google.com:19302'],
+        // Frames between input submission and effect — ~33ms at 60fps.
+        // Same delay applied to local AND remote players so own input does
+        // not feel snappier than remote input on any given peer.
+        inputDelayFrames: 2,
+        // Each input packet repeats this many recent snapshots so a single
+        // dropped unreliable packet does not stall the lockstep tick gate.
+        inputRedundancyFrames: 4,
+        // Mesh size cap. Six players, full mesh = 15 datachannels.
+        maxPeers: 6,
+        // Canonical arena dimensions (host issues at start; clients scale
+        // their PIXI stage to fit). All collision, spawn, power-up, and
+        // hash math runs against these — never the local viewport.
+        arenaWidth: 1280,
+        arenaHeight: 720,
+        // State-hash gossip interval for drift detection.
+        stateHashIntervalFrames: 60,
+    },
     
     Players: [
         { id:'red',      keyLeft:49,   keyRight:81,   keySuperpower:65  },

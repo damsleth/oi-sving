@@ -25,6 +25,7 @@
 
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
+import { rand } from './rng'
 
 OiSving.Superpowerconfig = {};
 
@@ -716,7 +717,8 @@ OiSving.Superpowerconfig[OiSving.Superpowerconfig.types.RANDOM] = {
     helpers: {},
     init: function(curve) {
         var superpowerTypes = Object.values(OiSving.Superpowerconfig.types).filter(type => type !== OiSving.Superpowerconfig.types.RANDOM);
-        var randomSuperpowerType = superpowerTypes[Math.floor(Math.random() * superpowerTypes.length)];
+        // Seeded so the picker resolves to the same superpower on every peer.
+        var randomSuperpowerType = superpowerTypes[Math.floor(rand.next() * superpowerTypes.length)];
         var randomSuperpower = OiSving.Factory.getSuperpower(randomSuperpowerType);
 
         this.label = randomSuperpower.label;

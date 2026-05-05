@@ -25,6 +25,7 @@
 
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
+import { rand } from './rng'
 
 OiSving.Curve = function(player, game, field, config, audioPlayer) {
 
@@ -228,7 +229,7 @@ OiSving.Curve.prototype.computeNewAngle = function() {
 };
     
 OiSving.Curve.prototype.setRandomAngle = function() {
-    this.setAngle(2 * Math.PI * Math.random());
+    this.setAngle(2 * Math.PI * rand.next());
 };
 
 OiSving.Curve.prototype.useSuperpower = function(hook) {
@@ -240,7 +241,7 @@ OiSving.Curve.prototype.useSuperpower = function(hook) {
 };
 
 OiSving.Curve.prototype.resetHoleCountDown = function() {
-    this.getOptions().holeCountDown = this.getOptions().holeInterval + u.round(Math.random() * this.getOptions().holeIntervalRandomness, 0);
+    this.getOptions().holeCountDown = this.getOptions().holeInterval + u.round(rand.next() * this.getOptions().holeIntervalRandomness, 0);
 };
 
 OiSving.Curve.prototype.setMuted = function (soundKey, muted) {

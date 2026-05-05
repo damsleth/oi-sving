@@ -25,6 +25,7 @@
 
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
+import { rand } from './rng'
 
 OiSving.Field = {
     
@@ -108,8 +109,40 @@ OiSving.Field = {
         this.canvas.width = this.width;
         this.canvas.height = this.height;
 
+        // In single-player the arena is the viewport. In network rounds the
+        // host pins canonical arena dims via setArenaSize() before resize()
+        // runs again, in which case we keep the canonical pair.
+        if (this.arenaWidth === undefined || this.arenaHeight === undefined) {
+            this.arenaWidth = this.width;
+            this.arenaHeight = this.height;
+        }
+
         this.pixiApp.resize();
+        this.applyArenaScale();
         this.drawField();
+    },
+
+    // Pin canonical simulation dimensions. All collision, spawn, power-up,
+    // and state-hash math runs against these — never against the local
+    // viewport. The local PIXI stage is scaled to fit so a 1280x720 host
+    // arena renders identically on a phone or a wide monitor.
+    setArenaSize: function(width, height) {
+        this.arenaWidth = width;
+        this.arenaHeight = height;
+        this.applyArenaScale();
+    },
+
+    getArenaSize: function() {
+        return { width: this.arenaWidth, height: this.arenaHeight };
+    },
+
+    applyArenaScale: function() {
+        if (!this.pixiApp || this.arenaWidth === undefined || this.arenaHeight === undefined) return;
+        if (this.pixiApp.stage) {
+            var sx = this.width / this.arenaWidth;
+            var sy = this.height / this.arenaHeight;
+            this.pixiApp.stage.scale.set(sx, sy);
+        }
     },
 
     clearFieldContent: function() {
@@ -125,7 +158,8 @@ OiSving.Field = {
 
         this.pixiField.clear();
         this.pixiField.lineStyle(2, borderColor);
-        this.pixiField.drawRect(0, 0, this.width, this.height);
+        // Border drawn in arena coordinates; PIXI stage scale handles fit.
+        this.pixiField.drawRect(0, 0, this.arenaWidth, this.arenaHeight);
     },
 
     drawLine: function(type, fromPointX, fromPointY, toPointX, toPointY, color, curve) {
@@ -225,7 +259,9 @@ OiSving.Field = {
     },
     
     isPointOutOfBounds: function(pointX, pointY) {
-        return pointX <= 0 || pointY <= 0 || pointX >= this.width || pointY >= this.height;
+        // Arena dims drive collisions; rendering width/height may differ on
+        // peers with smaller/larger viewports.
+        return pointX <= 0 || pointY <= 0 || pointX >= this.arenaWidth || pointY >= this.arenaHeight;
     },
 
     isPointDrawn: function(pointX, pointY) {
@@ -257,10 +293,12 @@ OiSving.Field = {
     
     getRandomPosition: function(borderPadding) {
         if ( borderPadding === undefined ) borderPadding = 80;
-        
-        var posX = borderPadding + Math.round( (this.width - 2*borderPadding)*Math.random() );
-        var posY = borderPadding + Math.round( (this.height - 2*borderPadding)*Math.random() );
-        
+
+        // Spawn positions are simulation state — arena dims, not viewport,
+        // and seeded RNG so every peer agrees.
+        var posX = borderPadding + Math.round( (this.arenaWidth - 2*borderPadding)*rand.next() );
+        var posY = borderPadding + Math.round( (this.arenaHeight - 2*borderPadding)*rand.next() );
+
         return new OiSving.Point(posX, posY);
     },
 

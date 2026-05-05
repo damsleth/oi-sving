@@ -22,6 +22,9 @@ import './OiSvingLightbox'
 import './OiSvingPiwik'
 import './OiSvingPrivacypolicy'
 import './OiSving'
+// Multiplayer surface. net.ts attaches OiSving.Net so Menu/Game can
+// invoke host()/join()/startRound() once the inline UI wires them up.
+import './net'
 
 document.addEventListener('DOMContentLoaded', () => OiSving.init())
 window.addEventListener('beforeunload', () => OiSving.onUnload())

@@ -57,8 +57,11 @@
                                 <div id='menu-settings'>
                                     <div id='change-theme' class='button' onclick='OiSving.Theming.toggleTheme()'></div>
                                     <div class='toggle-sound button' onclick='OiSving.Sound.toggleSound()'></div>
+                                    <div id='host-game' class='button' onclick='OiSving.Net.host().then(c => { document.getElementById("net-status").innerText = "Room: " + c }).catch(e => { document.getElementById("net-status").innerText = "Host failed: " + e.message })'>Host Game</div>
+                                    <div id='join-game' class='button' onclick='var c = prompt("Room code"); if (c) OiSving.Net.join(c.toUpperCase()).then(() => { document.getElementById("net-status").innerText = "Joined " + c.toUpperCase() }).catch(e => { document.getElementById("net-status").innerText = "Join failed: " + e.message })'>Join Game</div>
                                     <div class='clear'></div>
                                 </div>
+                                <div id='net-status' class='light' style='margin-top:6px;text-align:center;'></div>
                             </div>
                         </td>
                     </tr>
