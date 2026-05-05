@@ -1,3 +1,4 @@
+// @ts-nocheck -- legacy strict-parity migration; tighten types per file
 /**
  *
  * Program:     OiSving (forked from Kurve by Markus Mächler)
@@ -22,7 +23,8 @@
  *
  */
 
-'use strict';
+import { OiSving } from './namespace'
+import { u } from './OiSvingUtility'
 
 OiSving.Privacypolicy = {
     init: function() {

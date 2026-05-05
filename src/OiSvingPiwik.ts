@@ -22,26 +22,31 @@
  *
  */
 
-'use strict';
+import { OiSving } from './namespace'
 
-OiSving.Lightbox = {
-    
-    lightboxOverlay: null,
-    lightboxContent: null,
-    
-    init: function() {
-        this.lightboxOverlay = document.getElementById('lightbox-overlay');
-        this.lightboxContent = document.getElementById('lightbox-content');
+function paq(): unknown[] | null {
+    return Array.isArray(window._paq) ? (window._paq as unknown[]) : null
+}
+
+OiSving.Piwik = {
+
+    isEnabled() {
+        return !!(OiSving.Config
+            && OiSving.Config.Analytics
+            && OiSving.Config.Analytics.enabled
+            && paq() !== null)
     },
-    
-    show: function(htmlContent) {
-        u.removeClass('hidden', 'lightbox-overlay');
-        this.lightboxContent.innerHTML = htmlContent;
+
+    trackPageVariable(index: number, name: string, value: string) {
+        if (!OiSving.Piwik.isEnabled()) return
+        const q = paq(); if (!q) return
+        q.push(['setCustomVariable', index, name, value, 'page'])
     },
-    
-    hide: function() {
-        u.setClassName('hidden', 'lightbox-overlay');
-        this.lightboxContent.innerHTML = '';
-    }
-    
-}; 
+
+    trackPageView(title?: string) {
+        if (!OiSving.Piwik.isEnabled()) return
+        const q = paq(); if (!q) return
+        q.push(['setDocumentTitle', title])
+        q.push(['trackPageView'])
+    },
+}

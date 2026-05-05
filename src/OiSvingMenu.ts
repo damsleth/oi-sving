@@ -1,3 +1,4 @@
+// @ts-nocheck -- legacy strict-parity migration; tighten types per file
 /**
  *
  * Program:     OiSving
@@ -22,7 +23,8 @@
  *
  */
 
-'use strict';
+import { OiSving } from './namespace'
+import { u } from './OiSvingUtility'
 
 OiSving.Menu = {
     

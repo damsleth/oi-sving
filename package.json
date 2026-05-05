@@ -2,20 +2,32 @@
   "name": "oisving",
   "version": "1.5.1",
   "description": "Oi, Sving! - HTML5 multiplayer take on Achtung, die Kurve!",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/damsleth/oi-sving/"
   },
   "author": "Oi, Sving! contributors. Forked from Markus Mächler (https://github.com/maechler/kurve)",
   "license": "GPL-3.0",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build:js": "bun run scripts/build.ts",
+    "build:css": "bun x sass scss/main.scss dist/css/main.css --no-source-map --quiet-deps",
+    "build:images": "mkdir -p dist/images && cp -R images/. dist/images/",
+    "build:sound": "mkdir -p dist/sound && cp -R sound/. dist/sound/",
+    "build": "bun run build:js && bun run build:css && bun run build:images && bun run build:sound",
+    "dist": "bun run clean && bun run typecheck && bun run test && bun run build",
+    "release": "bun run dist",
+    "typecheck": "bun x tsc --noEmit",
+    "test": "bun test",
+    "watch:js": "bun build src/main.ts --outfile=dist/js/oisving.min.js --target=browser --sourcemap=linked --watch",
+    "watch:css": "bun x sass scss/main.scss dist/css/main.css --watch --no-source-map --quiet-deps",
+    "serve": "bun x serve -l 3000 ."
+  },
   "devDependencies": {
-    "gulp": "^4.0.2",
-    "gulp-concat-util": "^0.5.5",
-    "gulp-sass": "^5.1.0",
-    "gulp-sourcemaps": "^3.0.0",
-    "gulp-uglify": "^3.0.2",
-    "gulp-watch": "^5.0.1",
-    "sass": "^1.54.5"
+    "@types/bun": "^1.1.0",
+    "sass": "^1.54.5",
+    "typescript": "^5.5.0"
   },
   "dependencies": {
     "pixi.js": "^6.5.1"

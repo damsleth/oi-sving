@@ -1,5 +1,5 @@
+// @ts-nocheck -- legacy strict-parity migration; tighten types per file
 /**
- * @license
  *
  * Program:     OiSving
  * Author:      Markus Mächler, marmaechler@gmail.com
@@ -23,10 +23,27 @@
  *
  */
 
-'use strict';
+import { OiSving } from './namespace'
+import { u } from './OiSvingUtility'
 
-window.requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
-                               window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
-
-//See https://github.com/latusinski/polyfill-array-includes
-Array.prototype.includes||Object.defineProperty(Array.prototype,"includes",{value:function(r,e){if(null==this)throw new TypeError('"this" is null or not defined');var t=Object(this),n=t.length>>>0;if(0===n)return!1;var i,o,a=0|e,u=Math.max(0<=a?a:n-Math.abs(a),0);for(;u<n;){if((i=t[u])===(o=r)||"number"==typeof i&&"number"==typeof o&&isNaN(i)&&isNaN(o))return!0;u++}return!1}});
+OiSving.Lightbox = {
+    
+    lightboxOverlay: null,
+    lightboxContent: null,
+    
+    init: function() {
+        this.lightboxOverlay = document.getElementById('lightbox-overlay');
+        this.lightboxContent = document.getElementById('lightbox-content');
+    },
+    
+    show: function(htmlContent) {
+        u.removeClass('hidden', 'lightbox-overlay');
+        this.lightboxContent.innerHTML = htmlContent;
+    },
+    
+    hide: function() {
+        u.setClassName('hidden', 'lightbox-overlay');
+        this.lightboxContent.innerHTML = '';
+    }
+    
+}; 
