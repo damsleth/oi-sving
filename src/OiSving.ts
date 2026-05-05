@@ -36,7 +36,6 @@ OiSving.init = function () {
   OiSving.Menu.init()
   OiSving.Game.init()
   OiSving.Lightbox.init()
-  OiSving.Privacypolicy.init()
 
   u.removeClass('hidden', 'app')
 }
@@ -57,6 +56,4 @@ OiSving.reload = function () {
   location.reload()
 }
 
-OiSving.onUnload = function () {
-  OiSving.Piwik.trackPageView()
-}
+OiSving.onUnload = function () {}

@@ -491,32 +491,6 @@ p {
     height: 100%;
 }
 
-#press-space-overlay {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 32px;
-    color: #3F3E37;
-    background: rgba(247, 246, 242, 0.6);
-    pointer-events: none;
-    z-index: 10;
-
-    strong {
-        font-weight: bold;
-        margin: 0 6px;
-    }
-}
-
-body.dark-theme #press-space-overlay {
-    color: #DDD;
-    background: rgba(34, 34, 34, 0.6);
-}
-
 #lightbox-content .deathmatch h1 {
     -webkit-animation-name: blinker;
     -webkit-animation-duration: 0.3s;

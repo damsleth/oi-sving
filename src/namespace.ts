@@ -21,7 +21,6 @@ declare global {
     // Keep it on `window` so inline handlers and helpers that referenced
     // `u` as a free variable continue to resolve.
     u: OiSvingNamespace
-    _paq?: unknown[]
   }
 }
 

@@ -76,6 +76,18 @@ OiSving.Game = {
 
                 OiSving.Game.startNewRound();
             });
+
+            // Joiner mirrors host pause/unpause. Host never receives these
+            // events because broadcastPause/Unpause skip the local emit;
+            // host transitions are driven directly by togglePause.
+            OiSving.Net.on('pause', function() {
+                if (OiSving.Net.isHost && OiSving.Net.isHost()) return;
+                OiSving.Game.doPause();
+            });
+            OiSving.Net.on('unpause', function() {
+                if (OiSving.Net.isHost && OiSving.Net.isHost()) return;
+                OiSving.Game.endPause();
+            });
         }
 
         this.Audio.init();
@@ -207,17 +219,33 @@ OiSving.Game = {
     },
     
     onSpaceDown: function() {
+        // In a joined multiplayer session only the host can start, pause,
+        // or unpause. Joiner space presses on the game screen are no-ops;
+        // round-start, pause, and unpause arrive via OiSving.Net events.
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) {
+            return;
+        }
+
         if ( this.isGameOver ) return location.reload();
         if ( this.isRunning || this.isPaused ) return this.togglePause();
         if ( !this.isRoundStarted && !this.deathMatch) return this.startNewRound();
         if ( !this.isRoundStarted && this.deathMatch) return this.startDeathMatch();
     },
-    
+
     togglePause: function() {
         if ( this.isPaused ) {
             this.endPause();
+            // Host fans out unpause to every joiner so all peers resume in
+            // the same tick. Joiner-side endPause runs through the
+            // 'unpause' event listener in init, not here.
+            if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost()) {
+                OiSving.Net.broadcastUnpause && OiSving.Net.broadcastUnpause();
+            }
         } else {
             this.doPause();
+            if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost()) {
+                OiSving.Net.broadcastPause && OiSving.Net.broadcastPause();
+            }
         }
     },
 
@@ -239,14 +267,6 @@ OiSving.Game = {
         this.startRun();
     },
     
-    showPressSpaceOverlay: function() {
-        u.removeClass('hidden', 'press-space-overlay');
-    },
-
-    hidePressSpaceOverlay: function() {
-        u.addClass('hidden', 'press-space-overlay');
-    },
-
     randomSeed: function() {
         var cryptoObj = window.crypto || window.msCrypto;
         if (cryptoObj && cryptoObj.getRandomValues) {
@@ -263,12 +283,7 @@ OiSving.Game = {
         this.addPlayers();
         this.addWindowListeners();
         this.renderPlayerScores();
-        this.showPressSpaceOverlay();
 
-        OiSving.Piwik.trackPageVariable(1, 'theme', OiSving.Theming.currentTheme);
-        OiSving.Piwik.trackPageVariable(2, 'number_of_players', this.players.length);
-        OiSving.Piwik.trackPageView('Game');
-        
         this.startNewRound.bind(this);
     },
     
@@ -332,7 +347,6 @@ OiSving.Game = {
             );
         }
 
-        this.hidePressSpaceOverlay();
         OiSving.Field.clearFieldContent();
         this.initRun();
         this.renderPlayerScores();
@@ -379,9 +393,6 @@ OiSving.Game = {
         this.Audio.terminateRound();
         OiSving.Field.resize();
         this.checkForWinner();
-        if (!this.isGameOver && !this.deathMatch) {
-            this.showPressSpaceOverlay();
-        }
     },
 
     incrementSuperpowers: function() {
@@ -435,17 +446,14 @@ OiSving.Game = {
     },
     
     startDeathMatch: function(winners) {
-        OiSving.Piwik.trackPageVariable(3, 'death_match', 'yes');
         OiSving.Lightbox.hide();
         this.startNewRound();
     },
-    
+
     gameOver: function(winner) {
         this.isGameOver = true;
 
         this.Audio.gameOver();
-        OiSving.Piwik.trackPageVariable(4, 'finished_game', 'yes');
-        OiSving.Piwik.trackPageView('GameOver');
 
         OiSving.Lightbox.show(
             '<h1 class="active ' + winner.getId() + '">' + winner.getId() + ' wins!</h1>' +

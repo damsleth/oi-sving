@@ -166,8 +166,15 @@ OiSving.Menu = {
     },
 
     onSpaceDown: function() {
+        // In a joined multiplayer session only the host transitions menu ->
+        // game. The joiner enters the game screen via the round-start
+        // listener wired in OiSving.Game.init, never via its own keyboard.
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) {
+            return;
+        }
+
         this.buildGameCurves();
-        
+
         if (OiSving.Game.curves.length <= 1) {
             this.showNotEnoughPlayersError();
             return; //not enough players are ready

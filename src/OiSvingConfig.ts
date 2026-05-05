@@ -65,12 +65,6 @@ OiSving.Config = {
         fadeTimeOut: 60
     },
 
-    Analytics: {
-        enabled: false,
-        trackerUrl: null,
-        siteId: null,
-    },
-
     Net: {
         // WebSocket rendezvous URL. Null means "use this page's origin",
         // which is the LAN-friendly default for the standalone server.

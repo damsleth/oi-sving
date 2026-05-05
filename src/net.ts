@@ -41,6 +41,8 @@ const MSG_INPUT = 0x02
 const MSG_PING = 0x03
 const MSG_LEAVE = 0x04
 const MSG_STATE_HASH = 0x05
+const MSG_PAUSE = 0x06
+const MSG_UNPAUSE = 0x07
 
 export interface RosterEntry {
   peerId: string
@@ -53,6 +55,8 @@ export interface NetEvents {
   'player-left': (entry: RosterEntry) => void
   'round-start': (seed: number, arenaWidth: number, arenaHeight: number, startFrame: number) => void
   'state-hash-mismatch': (frameId: number, expected: number, actual: number) => void
+  'pause': () => void
+  'unpause': () => void
   'connection-state': (state: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed') => void
 }
 
@@ -246,6 +250,18 @@ function encodeInput(frameId: number, playerId: string, bits: InputBits): ArrayB
   return buf
 }
 
+function encodePause(): ArrayBuffer {
+  const buf = new ArrayBuffer(1)
+  new DataView(buf).setUint8(0, MSG_PAUSE)
+  return buf
+}
+
+function encodeUnpause(): ArrayBuffer {
+  const buf = new ArrayBuffer(1)
+  new DataView(buf).setUint8(0, MSG_UNPAUSE)
+  return buf
+}
+
 function encodeStateHash(frameId: number, hash: number): ArrayBuffer {
   const buf = new ArrayBuffer(1 + 4 + 4)
   const v = new DataView(buf)
@@ -300,6 +316,14 @@ function dispatch(msg: ArrayBuffer): void {
     case MSG_LEAVE: {
       // Roster update would live here. Curve just drives straight using
       // the deterministic-fallback policy in InputBuffer.get.
+      return
+    }
+    case MSG_PAUSE: {
+      events.emit('pause')
+      return
+    }
+    case MSG_UNPAUSE: {
+      events.emit('unpause')
       return
     }
     case MSG_STATE_HASH: {
@@ -493,6 +517,19 @@ OiSving.Net = {
 
   reportStateHash(frameId: number, hash: number): void {
     broadcast('control', encodeStateHash(frameId, hash))
+  },
+
+  // Host-only. Authoritative pause/unpause: host's space press fans out to
+  // every joiner so all peers freeze and resume their tick loops together.
+  // Joiners never call these directly — Game.onSpaceDown gates them out.
+  broadcastPause(): void {
+    if (!isHost) return
+    broadcast('control', encodePause())
+  },
+
+  broadcastUnpause(): void {
+    if (!isHost) return
+    broadcast('control', encodeUnpause())
   },
 
   // Constants re-exported for legacy code paths reading via OiSving.Net.
