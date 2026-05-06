@@ -38,13 +38,19 @@ Single-player and split-keyboard work out of the box. Players activate by pressi
 
 Joiners on the same network open `http://<host-lan-ip>:8787/` in any modern browser. Then:
 
-1. Host clicks **Host Game**, gets a 4-character code (no I/L/O/0/1, easier to read out loud).
-2. Joiners click **Join Game** and type the code.
-3. Host hits SPACE.
+1. **Host** clicks **Host Game**. A 4-character room code appears (no I/L/O/0/1, easier to read out loud) along with a list of any other rooms running on the same LAN.
+2. **Joiners** click **Join Game** and type the code, or click a room from the available-games list.
+3. After joining, **pick a color**. The menu locks colors that the host or other joiners have already taken; a "waiting for host" banner stays visible above the player list while the room is forming.
+4. **Host** clicks **Start Game** (or hits SPACE). The button only enables when the combined roster has ≥2 players.
 
-Gameplay is lockstep - every peer simulates the whole game from the same seed and only per-frame input bits cross the wire. Bandwidth is trivial. Works on most home networks; symmetric NATs may need a TURN server (not shipped).
+Host is the source of truth for the round - seed, arena, fps, hole timing, allowed colors, start, pause, unpause, and the final roster all come from the host. Joiners run the same lockstep simulation locally, so only per-frame input bits cross the wire. Bandwidth is trivial.
 
-This part is honest-experimental. Single-player is solid. Multiplayer is wired end-to-end but the two-browser smoke test that proves the lockstep handshake hasn't been run yet, so expect rough edges.
+#### Edge cases worth knowing
+
+- The host can run in **host-only mode** (zero local players) and just referee the room.
+- The browser shows a "leaving will drop you" prompt if you try to refresh or close the tab during a live multiplayer session.
+- Joiners cannot accidentally start a phantom local game by pressing SPACE - the menu and pause keys are gated to host-only.
+- Symmetric NATs may need a TURN server (not shipped). Same-LAN play is the primary target.
 
 ## Building from source / contributing
 
