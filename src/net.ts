@@ -504,6 +504,11 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // them is idempotent because InputBuffer.set is a write-by-key.
       const playerId = byteToPlayerId(v.getUint8(1))
       const count = v.getUint8(2)
+      // Roster authority: a peer may only submit inputs for players it
+      // has been assigned. Drop INPUT messages that don't satisfy that
+      // — otherwise a buggy or malicious peer could overwrite somebody
+      // else's bits and steer their curve.
+      if (fromSlot && !peerOwnsPlayerId(fromSlot.peerId, playerId)) return
       for (let i = 0; i < count; i++) {
         const frameId = v.getUint32(3 + i * 5)
         const bits = v.getUint8(3 + i * 5 + 4)
@@ -637,6 +642,18 @@ function broadcastRoster(): void {
   // Host emits its own roster-update locally too so its menu reconciles
   // off the same code path joiners use.
   events.emit('roster-update', snap)
+}
+
+function peerOwnsPlayerId(peerId: string, playerId: string): boolean {
+  // Authoritative on the host (live roster maps); on joiners we trust
+  // the host's most recent broadcast snapshot, which lives in the same
+  // maps after applyRosterSnapshot. If we have no roster info yet
+  // (early handshake), be permissive — an early rejection would create
+  // a chicken-and-egg with MSG_ROSTER preceding the first MSG_INPUT.
+  if (peerId === localPeerId) return localPlayerIds.includes(playerId)
+  const ids = remotePlayerIdsByPeer.get(peerId)
+  if (!ids || ids.length === 0) return true
+  return ids.includes(playerId)
 }
 
 function rosterContainsPlayerId(playerId: string): { peerId: string } | null {
