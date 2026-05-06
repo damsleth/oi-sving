@@ -51,7 +51,8 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          mkdir -p dist/release-archives
+          archives_dir="$GITHUB_WORKSPACE/dist/release-archives"
+          mkdir -p "$archives_dir"
           tag_name="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
           if [[ -z "$tag_name" ]]; then tag_name="dev-$(date +%Y%m%d%H%M%S)"; fi
           echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
@@ -61,13 +62,17 @@ jobs:
             target="${dir%/}"
             archive_base="oi-sving-${tag_name}-${target}"
             if [[ "$target" == windows-* ]]; then
-              (cd "$dir" && zip -9 "../../release-archives/${archive_base}.zip" "oi-sving.exe")
+              # Subshell because zip can't read its archive path relative
+              # to a -C-style flag, so we cd into the binary's dir first.
+              # Use an absolute archive path so the relative-path math
+              # doesn't depend on how deep the cd took us.
+              (cd "$dir" && zip -9 "$archives_dir/${archive_base}.zip" "oi-sving.exe")
             else
-              tar -C "$dir" -czf "../../release-archives/${archive_base}.tar.gz" "oi-sving"
+              tar -C "$dir" -czf "$archives_dir/${archive_base}.tar.gz" "oi-sving"
             fi
           done
 
-          cd ../../release-archives
+          cd "$archives_dir"
           shasum -a 256 * > SHA256SUMS.txt
           ls -la
 
