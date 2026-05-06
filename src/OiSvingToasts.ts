@@ -15,12 +15,22 @@ OiSving.Toasts = {
 
         if (!OiSving.Net || !OiSving.Net.on) return;
 
+        OiSving.Net.on('player-joined', function(entry) {
+            if (entry.isLocal) return;
+            OiSving.Toasts.show({
+                kind: 'info',
+                title: entry.playerId + ' connected',
+                body: 'Joined the room.',
+                duration: 4000,
+            });
+        });
+
         OiSving.Net.on('player-left', function(entry) {
             if (entry.isLocal) return;
             OiSving.Toasts.show({
                 kind: 'info',
-                title: 'Player left',
-                body: '"' + entry.playerId + '" disconnected.',
+                title: entry.playerId + ' disconnected',
+                body: 'Left the room.',
                 duration: 6000,
             });
         });

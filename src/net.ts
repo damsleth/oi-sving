@@ -645,7 +645,8 @@ function hostHandleClaim(fromPeerId: string, playerId: string): void {
     broadcastRoster()
     return
   }
-  if (fromPeerId === localPeerId) {
+  const isLocal = fromPeerId === localPeerId
+  if (isLocal) {
     if (!localPlayerIds.includes(playerId)) localPlayerIds.push(playerId)
   } else {
     const existing = remotePlayerIdsByPeer.get(fromPeerId) ?? []
@@ -653,18 +654,34 @@ function hostHandleClaim(fromPeerId: string, playerId: string): void {
       remotePlayerIdsByPeer.set(fromPeerId, [...existing, playerId])
     }
   }
+  // Host updates its own maps in-place above; broadcastRoster() only
+  // emits 'roster-update' locally, not 'player-joined'. Without this
+  // emit the host's own menu doesn't lock the joiner's color and the
+  // toast surface doesn't fire — so two players could end up picking
+  // the same color if the joiner claimed first. Joiners reach the
+  // same state via applyRosterSnapshot when the broadcast lands.
+  events.emit('player-joined', { peerId: fromPeerId, playerId, isLocal })
   broadcastRoster()
 }
 
 function hostHandleRelease(fromPeerId: string, playerId: string): void {
   if (!isHost) return
-  if (fromPeerId === localPeerId) {
-    localPlayerIds = localPlayerIds.filter(id => id !== playerId)
+  const isLocal = fromPeerId === localPeerId
+  let didRelease = false
+  if (isLocal) {
+    if (localPlayerIds.includes(playerId)) {
+      localPlayerIds = localPlayerIds.filter(id => id !== playerId)
+      didRelease = true
+    }
   } else {
     const existing = remotePlayerIdsByPeer.get(fromPeerId)
-    if (existing) {
+    if (existing && existing.includes(playerId)) {
       remotePlayerIdsByPeer.set(fromPeerId, existing.filter(id => id !== playerId))
+      didRelease = true
     }
+  }
+  if (didRelease) {
+    events.emit('player-left', { peerId: fromPeerId, playerId, isLocal })
   }
   broadcastRoster()
 }
