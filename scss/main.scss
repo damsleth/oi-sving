@@ -144,6 +144,32 @@ p {
     }
 }
 
+#host-peers-list {
+    margin-top: 6px;
+
+    .host-peer-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 12px;
+        margin-top: 3px;
+        font-size: 12px;
+        background: rgba(255, 255, 255, 0.03);
+        border-left: 2px solid rgba(59, 203, 105, 0.6);
+        border-radius: 2px;
+
+        .host-peer-who {
+            font-weight: 500;
+        }
+
+        .host-peer-addr {
+            opacity: 0.55;
+            font-family: monospace;
+            font-size: 11px;
+        }
+    }
+}
+
 #net-rooms-list {
     margin-top: 6px;
 

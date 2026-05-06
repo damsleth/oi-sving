@@ -68,7 +68,15 @@ export interface NetEvents {
   'unpause': () => void
   'roster-update': (snapshot: RosterSnapshot) => void
   'host-gone': () => void
+  'peer-online': (entry: PeerInfo) => void
+  'peer-offline': (entry: { peerId: string }) => void
   'connection-state': (state: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed') => void
+}
+
+export interface PeerInfo {
+  peerId: string
+  address: string | null
+  hostname: string | null
 }
 
 // Authoritative roster broadcast by the host on every claim/release/leave.
@@ -151,6 +159,7 @@ let isHost = false
 let localPeerId = ''
 const peers = new Map<string, PeerSlot>()
 const remotePlayerIdsByPeer = new Map<string, string[]>()
+const peerInfoByPeer = new Map<string, { address: string | null; hostname: string | null }>()
 const events = new EventBus()
 let inputBuffer = new InputBuffer()
 let netProvider: NetInputProvider | null = null
@@ -755,6 +764,24 @@ OiSving.Net = {
     return [...new Set([...remotePlayerIdsByPeer.values()].flat())]
   },
 
+  // Host-side helper: list every joiner the signaling server has told
+  // us about, including ones that haven't claimed a color yet. Each
+  // entry carries IP and (best-effort reverse-DNS) hostname so the
+  // host UI can show who connected even before color picks land.
+  getKnownPeers(): PeerInfo[] {
+    const out: PeerInfo[] = []
+    for (const [peerId, info] of peerInfoByPeer) {
+      out.push({ peerId, address: info.address, hostname: info.hostname })
+    }
+    return out
+  },
+
+  // Look up the player ids claimed by a given peer. Useful next to
+  // getKnownPeers when rendering "joiner X has claimed (red, blue)".
+  getPlayerIdsForPeer(peerId: string): string[] {
+    return [...(remotePlayerIdsByPeer.get(peerId) ?? [])]
+  },
+
   on<E extends EventName>(name: E, fn: NetEvents[E]): () => void {
     return events.on(name, fn)
   },
@@ -782,19 +809,27 @@ OiSving.Net = {
         } else if (data.type === 'peer-joined') {
           const playerIds = normalizePlayerIds(data.playerIds)
           remotePlayerIdsByPeer.set(data.peerId, playerIds)
+          peerInfoByPeer.set(data.peerId, {
+            address: typeof data.address === 'string' ? data.address : null,
+            hostname: typeof data.hostname === 'string' ? data.hostname : null,
+          })
+          // Surface the connection itself even when the joiner hasn't
+          // claimed any colors yet. Menu uses this to render the
+          // joined-peers list under the room code.
+          events.emit('peer-online', {
+            peerId: data.peerId,
+            address: typeof data.address === 'string' ? data.address : null,
+            hostname: typeof data.hostname === 'string' ? data.hostname : null,
+          })
           for (const playerId of playerIds) {
             events.emit('player-joined', { peerId: data.peerId, playerId, isLocal: false })
           }
-          // Send the new joiner the authoritative roster as soon as the
-          // RTC channel comes up. flushOutbound replays this if the
-          // datachannel is not open yet.
           broadcastRoster()
         } else if (data.type === 'peer-left') {
-          // Joiner navigated away or refreshed. Surface as player-left so
-          // menus unlock that color, and rebroadcast the new roster so
-          // every other peer sees the same authoritative state.
           const departedPlayerIds = remotePlayerIdsByPeer.get(data.peerId) ?? []
           remotePlayerIdsByPeer.delete(data.peerId)
+          peerInfoByPeer.delete(data.peerId)
+          events.emit('peer-offline', { peerId: data.peerId })
           for (const playerId of departedPlayerIds) {
             events.emit('player-left', { peerId: data.peerId, playerId, isLocal: false })
           }
@@ -908,6 +943,7 @@ OiSving.Net = {
     localPeerId = ''
     localPlayerIds = []
     remotePlayerIdsByPeer.clear()
+    peerInfoByPeer.clear()
     hostPeerIdFromJoinerView = null
     inputBuffer = new InputBuffer()
     netProvider = null

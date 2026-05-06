@@ -68,6 +68,12 @@ OiSving.Menu = {
                 OiSving.Menu.refreshStartGameButton();
                 OiSving.Menu.refreshHostButton();
             });
+            OiSving.Net.on('peer-online', function() {
+                OiSving.Menu.refreshHostPeers();
+            });
+            OiSving.Net.on('peer-offline', function() {
+                OiSving.Menu.refreshHostPeers();
+            });
             OiSving.Net.on('host-gone', function() {
                 // We were a joiner and the host bailed. Reset Net state
                 // so the menu UI flips back to "Host Game" / "Join Game".
@@ -240,6 +246,41 @@ OiSving.Menu = {
         }
 
         OiSving.Menu.refreshMenuIntro();
+        OiSving.Menu.refreshHostPeers();
+    },
+
+    // Host-only: render the list of connected joiners with their IP +
+    // (best-effort) hostname + claimed colors. Hidden when not hosting,
+    // or when nobody has joined yet — empty rooms don't need a header.
+    refreshHostPeers: function() {
+        var container = document.getElementById('host-peers');
+        var list = document.getElementById('host-peers-list');
+        if (!container || !list) return;
+        var hosting = !!(OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost());
+        if (!hosting) {
+            container.classList.add('hidden');
+            list.innerHTML = '';
+            return;
+        }
+        var peers = OiSving.Net.getKnownPeers ? OiSving.Net.getKnownPeers() : [];
+        if (!peers.length) {
+            container.classList.add('hidden');
+            list.innerHTML = '';
+            return;
+        }
+        container.classList.remove('hidden');
+        var html = '';
+        peers.forEach(function(p) {
+            var ids = OiSving.Net.getPlayerIdsForPeer ? OiSving.Net.getPlayerIdsForPeer(p.peerId) : [];
+            var who = ids.length ? ids.join(', ') : 'no color yet';
+            var addr = p.address || 'unknown ip';
+            var host = p.hostname ? ' (' + p.hostname + ')' : '';
+            html += '<div class="host-peer-row">'
+                + '<span class="host-peer-who">' + who + '</span>'
+                + '<span class="host-peer-addr">' + addr + host + '</span>'
+                + '</div>';
+        });
+        list.innerHTML = html;
     },
 
     // The header text under the player list reflects role:

@@ -8,12 +8,16 @@
 // Or compile a standalone executable:
 //   bun run build:signaling
 
+import { promises as dns } from 'node:dns'
+
 import { embeddedAssets } from './embedded-assets'
 
 interface RoomMember {
   peerId: string
   ws: ServerWebSocket
   playerIds: string[]
+  address: string | null
+  hostname: string | null
 }
 
 interface Room {
@@ -24,7 +28,14 @@ interface Room {
   lastActivityAt: number
 }
 
-type ServerWebSocket = import('bun').ServerWebSocket<{ peerId?: string; code?: string }>
+interface WsData {
+  peerId?: string
+  code?: string
+  address?: string | null
+  hostname?: string | null
+}
+
+type ServerWebSocket = import('bun').ServerWebSocket<WsData>
 
 const PORT = Number(process.env.PORT ?? 8787)
 const BIND_HOST = process.env.BIND_HOST ?? '0.0.0.0'
@@ -119,13 +130,29 @@ function staticPath(url: URL): string | null {
   return `${STATIC_ROOT}/${normalized.join('/')}`
 }
 
-const server = Bun.serve<{ peerId?: string; code?: string }>({
+const server = Bun.serve<WsData>({
   port: PORT,
   hostname: BIND_HOST,
   async fetch(req, srv) {
     const url = new URL(req.url)
     if (req.headers.get('upgrade') === 'websocket') {
-      if (srv.upgrade(req, { data: {} })) return undefined
+      // Capture the peer's IP at upgrade time so the host can show
+      // who joined even before colors are claimed. Reverse DNS is
+      // best-effort and fails silently — most LAN clients won't
+      // have a PTR record, mDNS / Bonjour names depend on the host
+      // OS resolver.
+      const ipInfo = srv.requestIP(req)
+      const address = ipInfo?.address ?? null
+      let hostname: string | null = null
+      if (address) {
+        try {
+          const names = await dns.reverse(address)
+          hostname = names[0] ?? null
+        } catch {
+          hostname = null
+        }
+      }
+      if (srv.upgrade(req, { data: { address, hostname } })) return undefined
       return new Response('websocket upgrade failed\n', { status: 400 })
     }
     if (url.pathname === '/health') {
@@ -184,7 +211,13 @@ const server = Bun.serve<{ peerId?: string; code?: string }>({
           const code = mintCode()
           const room: Room = {
             code,
-            host: { peerId, ws, playerIds: normalizePlayerIds(msg.playerIds) },
+            host: {
+              peerId,
+              ws,
+              playerIds: normalizePlayerIds(msg.playerIds),
+              address: ws.data.address ?? null,
+              hostname: ws.data.hostname ?? null,
+            },
             joiners: new Map(),
             createdAt: Date.now(),
             lastActivityAt: Date.now(),
@@ -202,12 +235,14 @@ const server = Bun.serve<{ peerId?: string; code?: string }>({
           if (!room) return send(ws, { type: 'error', message: 'unknown room' })
           if (!peerId) return send(ws, { type: 'error', message: 'missing peerId' })
           const playerIds = normalizePlayerIds(msg.playerIds)
-          room.joiners.set(peerId, { peerId, ws, playerIds })
+          const address = ws.data.address ?? null
+          const hostname = ws.data.hostname ?? null
+          room.joiners.set(peerId, { peerId, ws, playerIds, address, hostname })
           room.lastActivityAt = Date.now()
           ws.data.peerId = peerId
           ws.data.code = code
           send(ws, { type: 'joined', hostId: room.host.peerId, hostPlayerIds: room.host.playerIds })
-          send(room.host.ws, { type: 'peer-joined', peerId, playerIds })
+          send(room.host.ws, { type: 'peer-joined', peerId, playerIds, address, hostname })
           return
         }
         case 'offer':
