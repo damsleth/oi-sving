@@ -177,6 +177,14 @@ class NetInputProvider implements InputProvider {
   }
 }
 
+// Per-peer cache of locally-computed state-hash gossip values, keyed by
+// the simulation frameId at which we hashed. Used to do frame-aligned
+// drift detection regardless of when peers' wall clocks tick. Pending
+// remote hashes that arrive before local catches up sit here too.
+const localHashByFrame = new Map<number, number>()
+const pendingRemoteHashes = new Map<number, number>()
+const HASH_CACHE_RETAIN_FRAMES = 600 // ~10s at 60 fps
+
 // Module-level mutable state. The singleton matches the existing OiSving
 // module shape; tests inject via OiSving.Net.__setMockSocket.
 let signalingSocket: WebSocket | null = null
@@ -541,14 +549,24 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       return
     }
     case MSG_STATE_HASH: {
-      // Compare against local hash if available. Mismatch is emitted as
-      // an event; the round can choose to abort to lobby (the simpler
-      // failure mode the plan calls for) rather than try to resync.
+      // Compare host's hash for frame N against THIS peer's recorded
+      // hash for frame N — not its current state. Recomputing now would
+      // diff host-state-at-N against local-state-at-(N+k) where k is
+      // the wall-clock skew (network RTT + per-peer start-delay drift).
+      // That's a guaranteed false positive even when the simulation is
+      // perfectly deterministic. Each peer caches its own gossip hash
+      // in localHashByFrame so this comparison is always frame-aligned.
       const frameId = v.getUint32(1)
       const remoteHash = v.getUint32(5)
-      const localHash = OiSving.Game?.computeStateHash?.()
-      if (typeof localHash === 'number' && localHash !== remoteHash) {
-        events.emit('state-hash-mismatch', frameId, remoteHash, localHash)
+      const myHashAtFrame = localHashByFrame.get(frameId)
+      if (typeof myHashAtFrame === 'number') {
+        if (myHashAtFrame !== remoteHash) {
+          events.emit('state-hash-mismatch', frameId, remoteHash, myHashAtFrame)
+        }
+      } else {
+        // Local peer is behind; remember the remote claim and compare
+        // when our own gossip for that frame fires.
+        pendingRemoteHashes.set(frameId, remoteHash)
       }
       return
     }
@@ -961,6 +979,23 @@ OiSving.Net = {
   },
 
   reportStateHash(frameId: number, hash: number): void {
+    // Cache locally so MSG_STATE_HASH dispatch can do frame-aligned
+    // comparison instead of recomputing current state at receive time.
+    // Resolve any pending remote hash for the same frame now that we
+    // have a value to compare against.
+    localHashByFrame.set(frameId, hash)
+    const cutoff = frameId - HASH_CACHE_RETAIN_FRAMES
+    for (const f of localHashByFrame.keys()) {
+      if (f < cutoff) localHashByFrame.delete(f)
+    }
+    const pending = pendingRemoteHashes.get(frameId)
+    if (typeof pending === 'number') {
+      pendingRemoteHashes.delete(frameId)
+      if (pending !== hash) events.emit('state-hash-mismatch', frameId, pending, hash)
+    }
+    for (const f of pendingRemoteHashes.keys()) {
+      if (f < cutoff) pendingRemoteHashes.delete(f)
+    }
     broadcast('control', encodeStateHash(frameId, hash))
   },
 
