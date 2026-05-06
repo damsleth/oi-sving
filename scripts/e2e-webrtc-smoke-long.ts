@@ -179,6 +179,13 @@ try {
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
+      // Headless Chrome still applies intensive-wake-up throttling to
+      // backgrounded renderers in the same instance even with the flags
+      // above; explicitly disabling those features lets both tabs tick
+      // setInterval at full rate. Without this, the joiner page sits at
+      // CURRENT_FRAME_ID = 0 while host advances and every state-hash
+      // gossip looks like a divergence even though it's pure throttling.
+      '--disable-features=IntensiveWakeUpThrottling,CalculateNativeWinOcclusion,BackForwardCache',
       'about:blank',
     ],
     stdout: 'pipe',
@@ -192,6 +199,16 @@ try {
 
   host = await newPage(baseUrl)
   joiner = await newPage(baseUrl)
+
+  // Force both pages to behave as if focused so neither one gets timer
+  // throttled while the other is in front. Required because only one
+  // CDP target can be Page.bringToFront at a time, and a backgrounded
+  // tab's setInterval falls behind enough that state-hash gossip on
+  // every 60-frame interval reports a divergence that's actually just
+  // throttling.
+  await Promise.all([host, joiner].map(async page => {
+    await page.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+  }))
 
   await Promise.all([host, joiner].map(page => waitFor('OiSving bootstrap', () => page.eval<boolean>(`
     Boolean(window.OiSving?.Net && !document.body.classList.contains('hidden'))

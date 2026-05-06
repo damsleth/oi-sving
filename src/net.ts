@@ -111,29 +111,39 @@ interface PeerSlot {
 // Buffered per-(frame, playerId) input bitfield. The input channel is
 // unordered + maxRetransmits=0, so a single dropped packet is normal.
 // Each transmitted INPUT message carries the last `inputRedundancyFrames`
-// snapshots; we keep the latest seen value per (frame, player) pair.
+// snapshots; even with one drop, the next packet replays the missed
+// frame, so the buffer converges on every peer.
 class InputBuffer {
   private cells = new Map<string, InputBits>()
+  // Track the highest frameId seen per player so the fallback returns the
+  // latest-FRAME bits, not the latest-ARRIVAL bits. With ordered: false
+  // datachannels, packets can arrive frame-N before frame-N-1; an
+  // arrival-order fallback would diverge between peers because each peer
+  // observes a different shuffle.
   private lastBitsByPlayer = new Map<string, InputBits>()
+  private lastFrameByPlayer = new Map<string, number>()
 
   set(frameId: number, playerId: string, bits: InputBits): void {
     this.cells.set(`${frameId}|${playerId}`, bits)
-    this.lastBitsByPlayer.set(playerId, bits)
+    const prevMax = this.lastFrameByPlayer.get(playerId) ?? -1
+    if (frameId > prevMax) {
+      this.lastFrameByPlayer.set(playerId, frameId)
+      this.lastBitsByPlayer.set(playerId, bits)
+    }
   }
 
   // Resolve input for `frameId` and `playerId`. If the exact frame is
-  // missing, fall back to the most recently observed bits for that player
-  // (deterministic across peers because each peer has the same redundant
-  // history). If we have never seen any bits for that player, return zero
-  // input — matches the "AFK death" intuition.
+  // missing (a dropped + un-replayed packet, or a frame the sender
+  // genuinely had no input for), fall back to the most recent
+  // sender-frame's bits we have on record. Both peers compute the same
+  // answer as long as their sets of received frames agree — which they
+  // do once redundancy has replayed the missed packet.
   get(frameId: number, playerId: string): InputBits {
     const exact = this.cells.get(`${frameId}|${playerId}`)
     if (exact !== undefined) return exact
     return this.lastBitsByPlayer.get(playerId) ?? 0
   }
 
-  // Drop entries older than `keepFromFrame`. Bounded memory usage in long
-  // rounds.
   prune(keepFromFrame: number): void {
     for (const k of this.cells.keys()) {
       const frame = Number(k.split('|')[0])
@@ -143,18 +153,27 @@ class InputBuffer {
 }
 
 class NetInputProvider implements InputProvider {
-  constructor(private buffer: InputBuffer, private inputDelay: number) {}
-  // The provider returns the bitfield that was scheduled `inputDelay`
-  // frames ago. Submission writes into the same delay window, so local
-  // and remote players experience identical perceived lag.
+  // Per-player ring of the last `redundancy` (frame, bits) submissions.
+  // Each broadcast packet carries the entire ring so a single drop on
+  // the unordered + maxRetransmits=0 input channel gets repaired by the
+  // next packet. Without this, both peers' InputBuffers diverge as soon
+  // as one packet is lost — exactly the lockstep failure mode the
+  // protocol design called out.
+  private history = new Map<string, Array<{ frameId: number; bits: InputBits }>>()
+  constructor(private buffer: InputBuffer, private inputDelay: number, private redundancy: number = 4) {}
   get(frameId: number, playerId: string): InputBits {
     return this.buffer.get(frameId, playerId)
   }
   submit(frameId: number, playerId: string, bits: InputBits): void {
-    // Local submissions also live in the buffer at the scheduled frame
-    // so the local Curve sees the same delay remote curves see.
-    this.buffer.set(frameId + this.inputDelay, playerId, bits)
-    OiSving.Net?.broadcastInput(frameId + this.inputDelay, playerId, bits)
+    const scheduled = frameId + this.inputDelay
+    this.buffer.set(scheduled, playerId, bits)
+
+    const ring = this.history.get(playerId) ?? []
+    ring.push({ frameId: scheduled, bits })
+    while (ring.length > this.redundancy) ring.shift()
+    this.history.set(playerId, ring)
+
+    OiSving.Net?.broadcastInputBatch(playerId, ring)
   }
 }
 
@@ -351,17 +370,25 @@ function encodeStart(
   return buf
 }
 
-function encodeInput(frameId: number, playerId: string, bits: InputBits): ArrayBuffer {
-  // playerId is a short color string (red/orange/.../pink). For the wire we
-  // use a 1-byte index from the roster mapping. For now embed the first
-  // character code; the host roster guarantees uniqueness.
-  const buf = new ArrayBuffer(1 + 4 + 1 + 2)
+// Pack a redundancy window into a single MSG_INPUT packet. Wire layout:
+//   0       u8   MSG_INPUT
+//   1       u8   playerId index
+//   2       u8   count (entries that follow)
+//   3..N    per entry: u32 frameId + u8 bits
+// One packet covering the last N submitted frames means a single drop on the
+// unordered input channel is repaired by the next packet — both peers
+// converge on identical buffer cells, which is what makes the lockstep
+// fallback (latest-frame-bits) deterministic.
+function encodeInputBatch(playerId: string, entries: Array<{ frameId: number; bits: InputBits }>): ArrayBuffer {
+  const buf = new ArrayBuffer(3 + entries.length * 5)
   const v = new DataView(buf)
   v.setUint8(0, MSG_INPUT)
-  v.setUint32(1, frameId)
-  v.setUint8(5, playerIdToByte(playerId))
-  v.setUint8(6, 1)
-  v.setUint8(7, bits & 0xff)
+  v.setUint8(1, playerIdToByte(playerId))
+  v.setUint8(2, entries.length & 0xff)
+  for (let i = 0; i < entries.length; i++) {
+    v.setUint32(3 + i * 5, entries[i].frameId)
+    v.setUint8(3 + i * 5 + 4, entries[i].bits & 0xff)
+  }
   return buf
 }
 
@@ -464,10 +491,16 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       return
     }
     case MSG_INPUT: {
-      const frameId = v.getUint32(1)
-      const playerId = byteToPlayerId(v.getUint8(5))
-      const bits = v.getUint8(7)
-      inputBuffer.set(frameId, playerId, bits)
+      // Batch decode: each packet carries a redundancy window of
+      // recent (frame, bits) entries for one player. Setting all of
+      // them is idempotent because InputBuffer.set is a write-by-key.
+      const playerId = byteToPlayerId(v.getUint8(1))
+      const count = v.getUint8(2)
+      for (let i = 0; i < count; i++) {
+        const frameId = v.getUint32(3 + i * 5)
+        const bits = v.getUint8(3 + i * 5 + 4)
+        inputBuffer.set(frameId, playerId, bits)
+      }
       return
     }
     case MSG_LEAVE: {
@@ -911,9 +944,12 @@ OiSving.Net = {
     netProvider.submit(frameId, playerId, bits)
   },
 
-  // Used internally by NetInputProvider.submit.
-  broadcastInput(scheduledFrameId: number, playerId: string, bits: InputBits): void {
-    broadcast('input', encodeInput(scheduledFrameId, playerId, bits))
+  // Used internally by NetInputProvider.submit. Sends the full
+  // redundancy window in one packet so a single drop on the unordered
+  // input channel is repaired by the next submission.
+  broadcastInputBatch(playerId: string, entries: Array<{ frameId: number; bits: InputBits }>): void {
+    if (entries.length === 0) return
+    broadcast('input', encodeInputBatch(playerId, entries))
   },
 
   getInputsForFrame(frameId: number, playerId: string): InputBits {
