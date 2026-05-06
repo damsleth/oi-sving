@@ -554,6 +554,21 @@ function attachDataChannel(slot: PeerSlot, ch: RTCDataChannel, label: 'control' 
     else slot.input = ch
     setConnState('open')
     flushOutbound(slot)
+    // Re-broadcast the authoritative roster the moment a NEW joiner's
+    // control channel opens. The earlier broadcastRoster in the
+    // signaling 'peer-joined' handler runs before this slot's data
+    // channel exists, so a 3rd-or-later joiner would never see the
+    // existing roster (and would therefore miss other joiners' colors,
+    // their PeerSlot entries, and their initial player-joined events).
+    // Sending the snapshot directly to this slot fills the gap without
+    // requiring another claim/release event in the room.
+    if (label === 'control' && isHost) {
+      const snap = buildRosterSnapshot()
+      const msg = encodeJsonMsg(MSG_ROSTER, snap)
+      const target = slot.control
+      if (target && target.readyState === 'open') target.send(msg)
+      else slot.outboundQueue.push({ channel: 'control', msg })
+    }
   })
   ch.addEventListener('close', () => {
     if (label === 'control') slot.control = null
