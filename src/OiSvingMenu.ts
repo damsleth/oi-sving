@@ -66,8 +66,18 @@ OiSving.Menu = {
             });
             OiSving.Net.on('connection-state', function() {
                 OiSving.Menu.refreshStartGameButton();
+                OiSving.Menu.refreshHostButton();
+            });
+            OiSving.Net.on('host-gone', function() {
+                // We were a joiner and the host bailed. Reset Net state
+                // so the menu UI flips back to "Host Game" / "Join Game".
+                if (OiSving.Net.leaveRoom) OiSving.Net.leaveRoom();
+                OiSving.Menu.refreshHostButton();
+                OiSving.Menu.refreshStartGameButton();
             });
         }
+
+        OiSving.Menu.refreshHostButton();
 
         // Net discovery is dormant by default — single-player is assumed
         // until the user clicks Host or Join. revealNetDiscovery starts
@@ -181,15 +191,43 @@ OiSving.Menu = {
 
     onHostGameClicked: function() {
         if (!OiSving.Net || !OiSving.Net.host) return;
+
+        // Toggle: a second click closes the room. Closing the host's
+        // signaling socket fires 'host-gone' to every joiner via the
+        // server, so peers leave cleanly without a manual broadcast.
+        // Also handles the joiner case: clicking Host while joined
+        // tears down the joined session first, then opens our own.
+        if (OiSving.Net.isActive && OiSving.Net.isActive()) {
+            var wasHosting = OiSving.Net.isHost && OiSving.Net.isHost();
+            OiSving.Net.leaveRoom();
+            document.getElementById('net-status').innerText = '';
+            OiSving.Menu.hideJoinForm();
+            OiSving.Menu.refreshHostButton();
+            OiSving.Menu.refreshStartGameButton();
+            OiSving.Menu.refreshAvailableRooms();
+            if (wasHosting) return;
+            // If we were a joiner, fall through and start hosting.
+        }
+
         OiSving.Menu.revealNetDiscovery();
         OiSving.Menu.hideJoinForm();
         OiSving.Net.host().then(function(c) {
             document.getElementById('net-status').innerText = 'Room: ' + c;
+            OiSving.Menu.refreshHostButton();
             OiSving.Menu.refreshStartGameButton();
             OiSving.Menu.refreshAvailableRooms();
         }).catch(function(err) {
             document.getElementById('net-status').innerText = 'Host failed: ' + err.message;
         });
+    },
+
+    refreshHostButton: function() {
+        var btn = document.getElementById('host-game');
+        if (!btn) return;
+        var hosting = !!(OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost());
+        btn.innerText = hosting ? 'Stop Hosting' : 'Host Game';
+        if (hosting) btn.classList.add('is-active');
+        else btn.classList.remove('is-active');
     },
 
     // Click "Join Game" to expand the join surface — input field + the

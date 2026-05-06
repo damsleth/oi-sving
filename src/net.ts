@@ -887,6 +887,35 @@ OiSving.Net = {
     broadcast('control', encodeJsonMsg(MSG_RELEASE, { playerId }))
   },
 
+  // Tear down the local participation in a room. Host: closes the
+  // signaling socket (server fans out 'host-gone' to every joiner) and
+  // every peer connection. Joiner: closes signaling (server fans out
+  // 'peer-left' to host) and every peer connection. Idempotent — safe
+  // to call when not in a room.
+  leaveRoom(): void {
+    for (const slot of peers.values()) {
+      try { slot.control?.close() } catch { /* */ }
+      try { slot.input?.close() } catch { /* */ }
+      try { slot.pc.close() } catch { /* */ }
+    }
+    peers.clear()
+    if (signalingSocket && signalingSocket.readyState <= 1) {
+      try { signalingSocket.close() } catch { /* */ }
+    }
+    signalingSocket = null
+    isHost = false
+    roomCode = null
+    localPeerId = ''
+    localPlayerIds = []
+    remotePlayerIdsByPeer.clear()
+    hostPeerIdFromJoinerView = null
+    inputBuffer = new InputBuffer()
+    netProvider = null
+    localHashByFrame.clear()
+    pendingRemoteHashes.clear()
+    setConnState('idle')
+  },
+
   // ≥2 players combined (local + remote) is required to start a round.
   // UI uses this to enable/disable the Start Game button.
   canStartRound(): boolean {

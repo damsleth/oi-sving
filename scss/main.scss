@@ -95,6 +95,12 @@ p {
     pointer-events: none;
 }
 
+.button.is-active {
+    background: rgba(213, 169, 47, 0.25);
+    color: #d5a92f;
+    box-shadow: inset 0 0 0 1px rgba(213, 169, 47, 0.45);
+}
+
 .hidden {
     display: none;
 }
