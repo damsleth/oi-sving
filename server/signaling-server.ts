@@ -74,13 +74,20 @@ function normalizePlayerIds(value: unknown): string[] {
 function gcRooms(): void {
   const now = Date.now()
   for (const [code, room] of rooms) {
-    if (now - room.lastActivityAt > ROOM_TTL_MS) {
-      try { room.host.ws.close(1000, 'idle') } catch { /* */ }
-      for (const j of room.joiners.values()) {
-        try { j.ws.close(1000, 'idle') } catch { /* */ }
-      }
-      rooms.delete(code)
+    if (now - room.lastActivityAt <= ROOM_TTL_MS) continue
+    // Don't GC a room whose host is still connected. lastActivityAt
+    // only tracks signaling messages, which stop flowing once the
+    // WebRTC handshake completes — so a long live round looks idle
+    // to the room timer. Closing the WebSocket mid-game then makes
+    // joiners think the host left. Use the host WS readyState as the
+    // real liveness signal: only orphaned/crashed rooms hit this
+    // branch.
+    if (room.host.ws.readyState === 1) continue // OPEN
+    try { room.host.ws.close(1000, 'idle') } catch { /* */ }
+    for (const j of room.joiners.values()) {
+      try { j.ws.close(1000, 'idle') } catch { /* */ }
     }
+    rooms.delete(code)
   }
 }
 
