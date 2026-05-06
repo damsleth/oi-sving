@@ -36,22 +36,28 @@ import {
   type InputProvider,
   setInputProvider,
 } from './input-provider'
-
-const MSG_START = 0x01
-const MSG_INPUT = 0x02
-// MSG_PING reserved (0x03)
-const MSG_LEAVE = 0x04
-const MSG_STATE_HASH = 0x05
-const MSG_PAUSE = 0x06
-const MSG_UNPAUSE = 0x07
-// Roster sync. Host is authoritative for which colors are claimed by which
-// peer. Joiners send MSG_CLAIM/MSG_RELEASE; the host validates against its
-// authoritative state and rebroadcasts MSG_ROSTER to every peer. Peers
-// reconcile their local menus from the broadcast — i.e. the host's reply
-// is the ground truth, joiner-side optimistic updates are corrected.
-const MSG_ROSTER = 0x08
-const MSG_CLAIM = 0x09
-const MSG_RELEASE = 0x0a
+import {
+  MSG_START,
+  MSG_INPUT,
+  MSG_LEAVE,
+  MSG_STATE_HASH,
+  MSG_PAUSE,
+  MSG_UNPAUSE,
+  MSG_ROSTER,
+  MSG_CLAIM,
+  MSG_RELEASE,
+  PLAYER_ID_TABLE,
+  byteToPlayerId,
+  playerMaskToIds,
+  playerIdsToMask,
+  encodeStart,
+  encodeInputBatch,
+  encodeStateHash,
+  encodePause,
+  encodeUnpause,
+  encodeJsonMsg,
+  decodeJsonMsg,
+} from './net-protocol'
 
 export interface RosterEntry {
   peerId: string
@@ -177,7 +183,7 @@ function genPeerId(): string {
 
 function normalizePlayerIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
-  const allowed = new Set(PLAYER_ID_TABLE)
+  const allowed: ReadonlySet<string> = new Set<string>(PLAYER_ID_TABLE)
   return [...new Set(value.map(v => String(v)).filter(id => allowed.has(id)))]
 }
 
@@ -192,23 +198,6 @@ interface HostSimConfig {
   allowedPlayerMask: number
   arenaWidth: number
   arenaHeight: number
-}
-
-function playerMaskToIds(mask: number): string[] {
-  const ids: string[] = []
-  for (let i = 0; i < PLAYER_ID_TABLE.length; i++) {
-    if (mask & (1 << i)) ids.push(PLAYER_ID_TABLE[i])
-  }
-  return ids
-}
-
-function playerIdsToMask(ids: string[]): number {
-  let mask = 0
-  for (const id of ids) {
-    const idx = PLAYER_ID_TABLE.indexOf(id)
-    if (idx >= 0) mask |= 1 << idx
-  }
-  return mask
 }
 
 // Joiner side: clobber local OiSving.Config with host's authoritative values
@@ -324,110 +313,6 @@ function openSignaling(url: string): WebSocket {
 // them — they fall back to their compiled default redundancy. New
 // joiners receiving an older host's 22-byte packet default to redundancy=4
 // via length-bound decode (see dispatch).
-function encodeStart(
-  seed: number,
-  arenaWidth: number,
-  arenaHeight: number,
-  startFrame: number,
-  inputDelayFrames: number,
-  stateHashIntervalFrames: number,
-  fps: number,
-  holeInterval: number,
-  holeIntervalRandomness: number,
-  initialSuperpowerCount: number,
-  allowedPlayerMask: number,
-  inputRedundancyFrames: number
-): ArrayBuffer {
-  const buf = new ArrayBuffer(23)
-  const v = new DataView(buf)
-  v.setUint8(0, MSG_START)
-  v.setUint32(1, seed >>> 0)
-  v.setUint16(5, arenaWidth)
-  v.setUint16(7, arenaHeight)
-  v.setUint32(9, startFrame)
-  v.setUint8(13, inputDelayFrames & 0xff)
-  v.setUint8(14, stateHashIntervalFrames & 0xff)
-  v.setUint8(15, fps & 0xff)
-  v.setUint16(16, holeInterval)
-  v.setUint16(18, holeIntervalRandomness)
-  v.setUint8(20, initialSuperpowerCount & 0xff)
-  v.setUint8(21, allowedPlayerMask & 0xff)
-  v.setUint8(22, inputRedundancyFrames & 0xff)
-  return buf
-}
-
-// Pack a redundancy window into a single MSG_INPUT packet. Wire layout:
-//   0       u8   MSG_INPUT
-//   1       u8   playerId index
-//   2       u8   count (entries that follow)
-//   3..N    per entry: u32 frameId + u8 bits
-// One packet covering the last N submitted frames means a single drop on the
-// unordered input channel is repaired by the next packet — both peers
-// converge on identical buffer cells, which is what makes the lockstep
-// fallback (latest-frame-bits) deterministic.
-function encodeInputBatch(playerId: string, entries: Array<{ frameId: number; bits: InputBits }>): ArrayBuffer {
-  const buf = new ArrayBuffer(3 + entries.length * 5)
-  const v = new DataView(buf)
-  v.setUint8(0, MSG_INPUT)
-  v.setUint8(1, playerIdToByte(playerId))
-  v.setUint8(2, entries.length & 0xff)
-  for (let i = 0; i < entries.length; i++) {
-    v.setUint32(3 + i * 5, entries[i].frameId)
-    v.setUint8(3 + i * 5 + 4, entries[i].bits & 0xff)
-  }
-  return buf
-}
-
-function encodePause(): ArrayBuffer {
-  const buf = new ArrayBuffer(1)
-  new DataView(buf).setUint8(0, MSG_PAUSE)
-  return buf
-}
-
-function encodeUnpause(): ArrayBuffer {
-  const buf = new ArrayBuffer(1)
-  new DataView(buf).setUint8(0, MSG_UNPAUSE)
-  return buf
-}
-
-// Roster + claim/release messages carry a JSON payload after the type byte.
-// JSON is overkill for size but the channel is reliable and these fire only
-// on roster changes (small, infrequent), so the simplicity wins.
-function encodeJsonMsg(type: number, payload: unknown): ArrayBuffer {
-  const json = JSON.stringify(payload)
-  const bytes = new TextEncoder().encode(json)
-  const buf = new ArrayBuffer(1 + bytes.byteLength)
-  new Uint8Array(buf, 0, 1)[0] = type
-  new Uint8Array(buf, 1).set(bytes)
-  return buf
-}
-
-function decodeJsonMsg(msg: ArrayBuffer): unknown {
-  const view = new Uint8Array(msg, 1)
-  const json = new TextDecoder().decode(view)
-  try { return JSON.parse(json) } catch { return null }
-}
-
-function encodeStateHash(frameId: number, hash: number): ArrayBuffer {
-  const buf = new ArrayBuffer(1 + 4 + 4)
-  const v = new DataView(buf)
-  v.setUint8(0, MSG_STATE_HASH)
-  v.setUint32(1, frameId)
-  v.setUint32(5, hash >>> 0)
-  return buf
-}
-
-const PLAYER_ID_TABLE = ['red', 'orange', 'green', 'blue', 'purple', 'pink']
-
-function playerIdToByte(id: string): number {
-  const idx = PLAYER_ID_TABLE.indexOf(id)
-  return idx >= 0 ? idx : 0xff
-}
-
-function byteToPlayerId(b: number): string {
-  return PLAYER_ID_TABLE[b] ?? 'red'
-}
-
 function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
   const v = new DataView(msg)
   const type = v.getUint8(0)
@@ -1042,12 +927,20 @@ OiSving.Net = {
     inputBuffer = new InputBuffer()
     netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy)
     setInputProvider(netProvider)
-    broadcast('control', encodeStart(
-      seed, arenaWidth, arenaHeight, startFrame,
-      inputDelay, hashInterval, fps,
-      holeInterval, holeRandom, initialSp, allowedMask,
-      inputRedundancy,
-    ))
+    broadcast('control', encodeStart({
+      seed,
+      arenaWidth,
+      arenaHeight,
+      startFrame,
+      inputDelayFrames: inputDelay,
+      stateHashIntervalFrames: hashInterval,
+      fps,
+      holeInterval,
+      holeIntervalRandomness: holeRandom,
+      initialSuperpowerCount: initialSp,
+      allowedPlayerMask: allowedMask,
+      inputRedundancyFrames: inputRedundancy,
+    }))
     events.emit('round-start', seed, arenaWidth, arenaHeight, startFrame)
   },
 
