@@ -26,6 +26,7 @@
 // simulation path. State-hash gossip every 60 frames detects drift early.
 
 import { OiSving } from './namespace'
+import { InputBuffer } from './input-buffer'
 import { Rng, setSimRng } from './rng'
 import {
   INPUT_LEFT,
@@ -106,50 +107,6 @@ interface PeerSlot {
   input: RTCDataChannel | null
   playerId: string
   outboundQueue: Array<{ channel: 'control' | 'input'; msg: ArrayBuffer }>
-}
-
-// Buffered per-(frame, playerId) input bitfield. The input channel is
-// unordered + maxRetransmits=0, so a single dropped packet is normal.
-// Each transmitted INPUT message carries the last `inputRedundancyFrames`
-// snapshots; even with one drop, the next packet replays the missed
-// frame, so the buffer converges on every peer.
-class InputBuffer {
-  private cells = new Map<string, InputBits>()
-  // Track the highest frameId seen per player so the fallback returns the
-  // latest-FRAME bits, not the latest-ARRIVAL bits. With ordered: false
-  // datachannels, packets can arrive frame-N before frame-N-1; an
-  // arrival-order fallback would diverge between peers because each peer
-  // observes a different shuffle.
-  private lastBitsByPlayer = new Map<string, InputBits>()
-  private lastFrameByPlayer = new Map<string, number>()
-
-  set(frameId: number, playerId: string, bits: InputBits): void {
-    this.cells.set(`${frameId}|${playerId}`, bits)
-    const prevMax = this.lastFrameByPlayer.get(playerId) ?? -1
-    if (frameId > prevMax) {
-      this.lastFrameByPlayer.set(playerId, frameId)
-      this.lastBitsByPlayer.set(playerId, bits)
-    }
-  }
-
-  // Resolve input for `frameId` and `playerId`. If the exact frame is
-  // missing (a dropped + un-replayed packet, or a frame the sender
-  // genuinely had no input for), fall back to the most recent
-  // sender-frame's bits we have on record. Both peers compute the same
-  // answer as long as their sets of received frames agree — which they
-  // do once redundancy has replayed the missed packet.
-  get(frameId: number, playerId: string): InputBits {
-    const exact = this.cells.get(`${frameId}|${playerId}`)
-    if (exact !== undefined) return exact
-    return this.lastBitsByPlayer.get(playerId) ?? 0
-  }
-
-  prune(keepFromFrame: number): void {
-    for (const k of this.cells.keys()) {
-      const frame = Number(k.split('|')[0])
-      if (frame < keepFromFrame) this.cells.delete(k)
-    }
-  }
 }
 
 class NetInputProvider implements InputProvider {
