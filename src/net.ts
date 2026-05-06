@@ -124,6 +124,7 @@ interface PeerSlot {
 }
 
 import { NetInputProvider } from './net-input-provider'
+import { diffRosterSnapshot } from './roster'
 
 const broadcastInputViaNet = (playerId: string, ring: Array<{ frameId: number; bits: InputBits }>) => {
   OiSving.Net?.broadcastInputBatch(playerId, ring)
@@ -593,43 +594,26 @@ function hostHandleRelease(fromPeerId: string, playerId: string): void {
 }
 
 function applyRosterSnapshot(snap: RosterSnapshot): void {
-  // Joiner-side reconcile. Compute diff vs current view, apply, emit
-  // player-joined/left so menu lock state catches up.
+  // Joiner-side reconcile. Pure diff in src/roster.ts computes the new
+  // state + the player-joined/left events; we apply them to the module
+  // state and fan out via the local event bus so menu lock state and
+  // toast surface catch up.
   const previousRemote = new Map<string, string[]>(remotePlayerIdsByPeer)
   const previousLocal = [...localPlayerIds]
+  const diff = diffRosterSnapshot({
+    snap,
+    previousRemote,
+    previousLocal,
+    localPeerId,
+    isHost,
+  })
 
   remotePlayerIdsByPeer.clear()
-  if (snap.hostPeerId && snap.hostPeerId !== localPeerId) {
-    remotePlayerIdsByPeer.set(snap.hostPeerId, [...(snap.hostPlayerIds ?? [])])
-    hostPeerIdFromJoinerView = snap.hostPeerId
-  }
-  for (const j of snap.joiners ?? []) {
-    if (j.peerId === localPeerId) {
-      // Host says my new local ids are these. Trust it.
-      localPlayerIds = [...(j.playerIds ?? [])]
-    } else {
-      remotePlayerIdsByPeer.set(j.peerId, [...(j.playerIds ?? [])])
-    }
-  }
-  // If host did not include this peer at all, our local roster collapses.
-  if (!snap.joiners?.some(j => j.peerId === localPeerId) && !isHost) {
-    localPlayerIds = []
-  }
-
-  const previousRemoteFlat = new Set([...previousRemote.values()].flat())
-  const currentRemoteFlat = new Set([...remotePlayerIdsByPeer.values()].flat())
-  for (const id of previousRemoteFlat) {
-    if (!currentRemoteFlat.has(id)) events.emit('player-left', { peerId: '', playerId: id, isLocal: false })
-  }
-  for (const id of currentRemoteFlat) {
-    if (!previousRemoteFlat.has(id)) events.emit('player-joined', { peerId: '', playerId: id, isLocal: false })
-  }
-  // Local-side: surface revoked/added ids so menu visuals match host truth.
-  for (const id of previousLocal) {
-    if (!localPlayerIds.includes(id)) events.emit('player-left', { peerId: localPeerId, playerId: id, isLocal: true })
-  }
-  for (const id of localPlayerIds) {
-    if (!previousLocal.includes(id)) events.emit('player-joined', { peerId: localPeerId, playerId: id, isLocal: true })
+  for (const [peerId, ids] of diff.newRemote) remotePlayerIdsByPeer.set(peerId, ids)
+  localPlayerIds = diff.newLocal
+  if (diff.newHostPeerId) hostPeerIdFromJoinerView = diff.newHostPeerId
+  for (const ev of diff.events) {
+    events.emit(ev.type, { peerId: ev.peerId, playerId: ev.playerId, isLocal: ev.isLocal })
   }
   events.emit('roster-update', snap)
 }
