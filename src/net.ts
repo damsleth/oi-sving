@@ -47,7 +47,6 @@ import {
   MSG_RELEASE,
   PLAYER_ID_TABLE,
   byteToPlayerId,
-  playerMaskToIds,
   playerIdsToMask,
   encodeStart,
   encodeInputBatch,
@@ -125,6 +124,11 @@ interface PeerSlot {
 
 import { NetInputProvider } from './net-input-provider'
 import { diffRosterSnapshot } from './roster'
+import { applyHostConfig as applyHostConfigCore, type HostSimConfig } from './host-config'
+
+function applyHostConfig(cfg: HostSimConfig): void {
+  applyHostConfigCore(cfg, OiSving.Config, OiSving.Game)
+}
 
 const broadcastInputViaNet = (playerId: string, ring: Array<{ frameId: number; bits: InputBits }>) => {
   OiSving.Net?.broadcastInputBatch(playerId, ring)
@@ -168,57 +172,9 @@ function normalizePlayerIds(value: unknown): string[] {
   return [...new Set(value.map(v => String(v)).filter(id => allowed.has(id)))]
 }
 
-interface HostSimConfig {
-  inputDelayFrames: number
-  inputRedundancyFrames: number
-  stateHashIntervalFrames: number
-  fps: number
-  holeInterval: number
-  holeIntervalRandomness: number
-  initialSuperpowerCount: number
-  allowedPlayerMask: number
-  arenaWidth: number
-  arenaHeight: number
-}
-
-// Joiner side: clobber local OiSving.Config with host's authoritative values
-// so simulation iteration draws the same RNG sequence on every peer. Game.fps
-// also drives the tick interval, so reapply on Game directly. allowedPlayerMask
-// trims OiSving.Config.Players to the host-allowed roster, which gates which
-// colors a joiner can pick from the menu.
-function applyHostConfig(cfg: HostSimConfig): void {
-  const cfgRoot = OiSving.Config
-  if (!cfgRoot) return
-
-  if (cfgRoot.Net) {
-    cfgRoot.Net.inputDelayFrames = cfg.inputDelayFrames
-    cfgRoot.Net.inputRedundancyFrames = cfg.inputRedundancyFrames
-    cfgRoot.Net.stateHashIntervalFrames = cfg.stateHashIntervalFrames
-    cfgRoot.Net.arenaWidth = cfg.arenaWidth
-    cfgRoot.Net.arenaHeight = cfg.arenaHeight
-  }
-  if (cfgRoot.Game) {
-    cfgRoot.Game.fps = cfg.fps
-    cfgRoot.Game.initialSuperpowerCount = cfg.initialSuperpowerCount
-  }
-  if (cfgRoot.Curve) {
-    cfgRoot.Curve.holeInterval = cfg.holeInterval
-    cfgRoot.Curve.holeIntervalRandomness = cfg.holeIntervalRandomness
-  }
-
-  const allowedIds = playerMaskToIds(cfg.allowedPlayerMask)
-  if (allowedIds.length > 0 && Array.isArray(cfgRoot.Players)) {
-    cfgRoot.Players = cfgRoot.Players.filter((p: { id: string }) => allowedIds.includes(p.id))
-  }
-
-  // Game.fps was captured into Game.fps + Game.intervalTimeOut at init time.
-  // If host's fps differs from joiner's compiled default, refresh the live
-  // values so setInterval ticks at host's rate.
-  if (OiSving.Game) {
-    OiSving.Game.fps = cfg.fps
-    OiSving.Game.intervalTimeOut = Math.round(1000 / cfg.fps)
-  }
-}
+// HostSimConfig + applyHostConfig live in src/host-config.ts so the
+// joiner-side override logic can be unit-tested without the OiSving
+// namespace. The wrapper here just plugs in the real refs.
 
 function getActivePlayerIds(): string[] {
   return (OiSving.players ?? [])
