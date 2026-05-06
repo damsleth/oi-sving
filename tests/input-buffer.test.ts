@@ -1,13 +1,8 @@
-// Tests for the lockstep input buffer. The interesting properties to
-// verify are the determinism-preserving ones: out-of-order packet
-// arrival must NOT change which fallback bits get returned, and prune
-// must drop only entries strictly older than the keep-from frame.
-//
-// These were the source of a real divergence in long-drift testing: a
-// previous implementation overwrote lastBitsByPlayer on every set(),
-// so two peers receiving the same packets in different orders ended up
-// returning different fallback bits for the same frame — guaranteed
-// drift even with identical RNG seeds.
+// Tests for the lockstep input buffer. The properties to verify are
+// the determinism-preserving ones: out-of-order packet arrival must
+// NOT change which fallback bits get returned, future-frame inputs
+// must NOT contribute to earlier missing frames, and prune must keep
+// a sentinel so the held-key fallback survives the cleanup window.
 
 import { describe, expect, test } from 'bun:test'
 import { InputBuffer } from '../src/input-buffer'
@@ -29,23 +24,42 @@ describe('InputBuffer', () => {
     expect(buf.get(99, 'green')).toBe(0)
   })
 
-  test('fallback returns the latest-frame bits, not the latest-arrival bits', () => {
-    // Simulating out-of-order WebRTC delivery: frame 100 arrives before
-    // frame 50. If the fallback were arrival-ordered, get(200) would
-    // return the bits from frame 50 (the most recent arrival). The
-    // correct frame-ordered fallback returns the bits from frame 100.
+  test('fallback returns the latest known frame ≤ requested', () => {
+    // Two known frames, asking for one in between. The fallback must
+    // pick the older frame (50) because 100 is in the future relative
+    // to the requested frame 75.
     const buf = new InputBuffer()
     buf.set(100, 'red', RIGHT)
     buf.set(50, 'red', LEFT)
+    expect(buf.get(75, 'red')).toBe(LEFT)
+  })
+
+  test('future-frame input does NOT leak into earlier missing frames', () => {
+    // Critical determinism property. Frame 102 arrives before frame 100.
+    // get(100) must return 0 (no known frame ≤ 100) — NOT 102's bits.
+    // Otherwise an out-of-order packet could retroactively change an
+    // earlier frame's input on whichever peer received it first.
+    const buf = new InputBuffer()
+    buf.set(102, 'red', RIGHT)
+    expect(buf.get(100, 'red')).toBe(0)
+    // Once frame 98 arrives, get(100) reflects it.
+    buf.set(98, 'red', LEFT)
+    expect(buf.get(100, 'red')).toBe(LEFT)
+    // get past 102 still gets the latest (102).
+    expect(buf.get(150, 'red')).toBe(RIGHT)
+  })
+
+  test('asking for a frame above the latest returns the latest', () => {
+    const buf = new InputBuffer()
+    buf.set(50, 'red', LEFT)
+    buf.set(100, 'red', RIGHT)
     expect(buf.get(200, 'red')).toBe(RIGHT)
   })
 
-  test('fallback agrees across two peers regardless of arrival order', () => {
-    // The whole point of the frame-ordered fallback is that two peers
+  test('two peers receiving packets in different orders agree on every frame', () => {
+    // The whole point of the frame-bounded fallback is that two peers
     // can receive the same packets in different orders and still
-    // resolve the same answer for a missing frame.
-    const peerA = new InputBuffer()
-    const peerB = new InputBuffer()
+    // resolve identical answers for any frame.
     const arrivals = [
       { frame: 30, bits: LEFT },
       { frame: 60, bits: RIGHT },
@@ -53,29 +67,29 @@ describe('InputBuffer', () => {
       { frame: 90, bits: SUPERPOWER },
       { frame: 75, bits: 0 },
     ]
-    // Peer A sees them in given order.
+
+    const peerA = new InputBuffer()
     for (const a of arrivals) peerA.set(a.frame, 'blue', a.bits)
-    // Peer B sees them in reverse order.
+    const peerB = new InputBuffer()
     for (const a of [...arrivals].reverse()) peerB.set(a.frame, 'blue', a.bits)
-    // Peer C sees them in arbitrary shuffle.
     const peerC = new InputBuffer()
     for (const a of [arrivals[3], arrivals[1], arrivals[4], arrivals[0], arrivals[2]]) {
       peerC.set(a.frame, 'blue', a.bits)
     }
-    // Fallback for any frame > 90 must be the bits from frame 90 (the
-    // latest known frame), regardless of how each peer received them.
-    expect(peerA.get(120, 'blue')).toBe(SUPERPOWER)
-    expect(peerB.get(120, 'blue')).toBe(SUPERPOWER)
-    expect(peerC.get(120, 'blue')).toBe(SUPERPOWER)
+
+    // Sample every frame across the range — each peer must agree.
+    for (let f = 0; f <= 120; f++) {
+      const a = peerA.get(f, 'blue')
+      expect(peerB.get(f, 'blue')).toBe(a)
+      expect(peerC.get(f, 'blue')).toBe(a)
+    }
   })
 
   test('exact bits override fallback even when frame is older than the latest', () => {
     const buf = new InputBuffer()
     buf.set(100, 'red', RIGHT)
     buf.set(50, 'red', LEFT)
-    // get(50) should return what was set for 50, not the fallback.
     expect(buf.get(50, 'red')).toBe(LEFT)
-    // get(100) returns its own bits.
     expect(buf.get(100, 'red')).toBe(RIGHT)
   })
 
@@ -85,7 +99,6 @@ describe('InputBuffer', () => {
     buf.set(10, 'blue', RIGHT)
     expect(buf.get(10, 'red')).toBe(LEFT)
     expect(buf.get(10, 'blue')).toBe(RIGHT)
-    // Fallbacks per-player.
     expect(buf.get(99, 'red')).toBe(LEFT)
     expect(buf.get(99, 'blue')).toBe(RIGHT)
     expect(buf.get(99, 'green')).toBe(0)
@@ -94,14 +107,12 @@ describe('InputBuffer', () => {
   test('redundant set is idempotent', () => {
     const buf = new InputBuffer()
     buf.set(42, 'red', LEFT)
-    buf.set(42, 'red', LEFT) // re-broadcast / packet repeat
+    buf.set(42, 'red', LEFT)
     buf.set(42, 'red', LEFT)
     expect(buf.get(42, 'red')).toBe(LEFT)
   })
 
   test('a later set with different bits overwrites for the same (frame, player)', () => {
-    // Should be exceedingly rare in practice (each frame is sampled
-    // once), but the contract is last-write-wins.
     const buf = new InputBuffer()
     buf.set(42, 'red', LEFT)
     buf.set(42, 'red', RIGHT)
@@ -114,24 +125,49 @@ describe('InputBuffer', () => {
     buf.set(20, 'red', RIGHT)
     buf.set(30, 'red', SUPERPOWER)
     buf.prune(20)
-    // Frame 10 is gone — exact lookup yields the fallback (latest-frame, 30 -> SUPERPOWER).
-    expect(buf.get(10, 'red')).toBe(SUPERPOWER)
-    // Frame 20 retained.
     expect(buf.get(20, 'red')).toBe(RIGHT)
-    // Frame 30 retained.
     expect(buf.get(30, 'red')).toBe(SUPERPOWER)
   })
 
-  test('prune does not lose the latest-frame fallback', () => {
-    // Pruning must not drop the lastBitsByPlayer state — otherwise a
-    // long-running round would lose its fallback once early frames age
-    // out and a late-arrival packet for an old frame would suddenly
-    // own the fallback again.
+  test('prune folds older frames into a single sentinel for held-key fallback', () => {
+    // After pruning, the buffer must still know what bits were held
+    // immediately before the kept window so future frames that fall
+    // between the sentinel and the next exact frame still resolve
+    // correctly.
     const buf = new InputBuffer()
     buf.set(10, 'red', LEFT)
-    buf.set(50, 'red', RIGHT)
-    buf.prune(40)
-    // Fallback still reflects frame 50.
-    expect(buf.get(999, 'red')).toBe(RIGHT)
+    buf.set(20, 'red', RIGHT)
+    buf.set(30, 'red', SUPERPOWER)
+    buf.set(60, 'red', LEFT)
+    buf.prune(50)
+    // Sentinel collapses 10/20/30 into the most-recent (30, SUPERPOWER)
+    // so a query for frame 55 still resolves to SUPERPOWER, not 0.
+    expect(buf.get(55, 'red')).toBe(SUPERPOWER)
+    // Future fallback past frame 60 still returns 60's bits.
+    expect(buf.get(999, 'red')).toBe(LEFT)
+  })
+
+  test('prune preserves cross-peer agreement', () => {
+    // Same packet set, different arrival orders, same prune. After the
+    // prune, both peers must still answer identically for any frame ≥
+    // the prune cutoff.
+    const arrivals = [
+      { frame: 10, bits: LEFT },
+      { frame: 20, bits: RIGHT },
+      { frame: 30, bits: SUPERPOWER },
+      { frame: 60, bits: 0 },
+      { frame: 50, bits: LEFT },
+    ]
+    const peerA = new InputBuffer()
+    for (const a of arrivals) peerA.set(a.frame, 'blue', a.bits)
+    peerA.prune(40)
+
+    const peerB = new InputBuffer()
+    for (const a of [...arrivals].reverse()) peerB.set(a.frame, 'blue', a.bits)
+    peerB.prune(40)
+
+    for (let f = 40; f <= 120; f++) {
+      expect(peerB.get(f, 'blue')).toBe(peerA.get(f, 'blue'))
+    }
   })
 })
