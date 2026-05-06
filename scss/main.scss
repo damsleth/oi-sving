@@ -365,9 +365,21 @@ p {
 
 #menu-settings {
     margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
 
+    // Float-based fallback used to leave #menu-settings height-less, so
+    // #net-status (the next sibling) overlapped the row of buttons. A
+    // flex container has its own height so siblings stack normally.
     & > div {
-      float: right;
+        float: none;
+        margin: 0;
+    }
+
+    & > .clear {
+        display: none;
     }
 }
 

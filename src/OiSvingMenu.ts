@@ -69,13 +69,9 @@ OiSving.Menu = {
             });
         }
 
-        // Poll the LAN signaling server for active rooms so single-tab
-        // discovery works without typing a code. Hidden while we're in a
-        // round (handled in renderRoomsList).
-        OiSving.Menu.refreshAvailableRooms();
-        OiSving.Menu._roomsPollHandle = setInterval(function() {
-            OiSving.Menu.refreshAvailableRooms();
-        }, 5000);
+        // Net discovery is dormant by default — single-player is assumed
+        // until the user clicks Host or Join. revealNetDiscovery starts
+        // polling and shows the available-games block.
 
         OiSving.Menu.refreshStartGameButton();
     },
@@ -113,16 +109,37 @@ OiSving.Menu = {
         else btn.classList.add('disabled');
     },
 
+    // Default: assume single-player. The available-games list and the
+    // polling that backs it stay dormant until the user clicks Host Game
+    // or Join Game — that's when "do other LAN games exist?" first becomes
+    // a question worth answering.
+    netDiscoveryRevealed: false,
+
+    revealNetDiscovery: function() {
+        if (OiSving.Menu.netDiscoveryRevealed) return;
+        OiSving.Menu.netDiscoveryRevealed = true;
+        var container = document.getElementById('net-rooms');
+        if (container) u.removeClass('hidden', 'net-rooms');
+        OiSving.Menu.refreshAvailableRooms();
+        // First reveal also kicks off the polling cadence.
+        if (!OiSving.Menu._roomsPollHandle) {
+            OiSving.Menu._roomsPollHandle = setInterval(function() {
+                OiSving.Menu.refreshAvailableRooms();
+            }, 5000);
+        }
+    },
+
     refreshAvailableRooms: function() {
+        if (!OiSving.Menu.netDiscoveryRevealed) return;
         if (!OiSving.Net || !OiSving.Net.listRooms) return;
         // Hide the available-games block while we're already connected to
         // a room — no need to advertise other lobbies in that state.
         var container = document.getElementById('net-rooms');
         if (OiSving.Net.isActive && OiSving.Net.isActive()) {
-            if (container) container.style.display = 'none';
+            if (container) u.addClass('hidden', 'net-rooms');
             return;
         }
-        if (container) container.style.display = '';
+        if (container) u.removeClass('hidden', 'net-rooms');
         OiSving.Net.listRooms().then(function(rooms) {
             OiSving.Menu.renderRoomsList(rooms || []);
         }).catch(function() {
@@ -161,6 +178,7 @@ OiSving.Menu = {
 
     onHostGameClicked: function() {
         if (!OiSving.Net || !OiSving.Net.host) return;
+        OiSving.Menu.revealNetDiscovery();
         OiSving.Net.host().then(function(c) {
             document.getElementById('net-status').innerText = 'Room: ' + c;
             OiSving.Menu.refreshStartGameButton();
@@ -171,6 +189,7 @@ OiSving.Menu = {
     },
 
     onJoinGameClicked: function() {
+        OiSving.Menu.revealNetDiscovery();
         var c = prompt('Room code');
         if (!c) return;
         OiSving.Menu.joinRoomCode(c);
