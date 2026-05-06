@@ -36,6 +36,7 @@ OiSving.init = function () {
   OiSving.Menu.init()
   OiSving.Game.init()
   OiSving.Lightbox.init()
+  if (OiSving.Toasts && OiSving.Toasts.init) OiSving.Toasts.init()
 
   u.removeClass('hidden', 'app')
 }
