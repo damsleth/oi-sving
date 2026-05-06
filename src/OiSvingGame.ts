@@ -401,11 +401,22 @@ OiSving.Game = {
     },
     
     initRun: function() {
-        this.curves.forEach(function(curve) {
+        // Iterate curves in stable lexical order so every peer draws RNG
+        // values for spawn/angle/hole-countdown in the same sequence.
+        // setSimRng has already been applied (host: Net.startRound;
+        // joiner: MSG_START dispatch) by the time this runs.
+        var sorted = this.curves.slice().sort(function(a, b) {
+            return a.getPlayer().getId() < b.getPlayer().getId() ? -1 : 1;
+        });
+        sorted.forEach(function(curve) {
             OiSving.Game.runningCurves[curve.getPlayer().getId()] = [curve];
-            
+
             curve.setPosition(OiSving.Field.getRandomPosition().getPosX(), OiSving.Field.getRandomPosition().getPosY());
             curve.setRandomAngle();
+            // resetHoleCountDown moved out of Curve constructor so the
+            // first hole is randomized from the round seed, not from
+            // whatever pre-seed rand state buildGameCurves caught.
+            curve.resetHoleCountDown();
             curve.getPlayer().getSuperpower().init(curve);
             curve.drawCurrentPosition(OiSving.Field);
         });

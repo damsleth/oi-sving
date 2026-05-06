@@ -83,7 +83,12 @@ OiSving.Curve = function(player, game, field, config, audioPlayer) {
     this.getOptions = function() { return options; };
     this.isInvisible = function() { return isInvisible; };
 
-    this.resetHoleCountDown(); //Randomize initial hole interval
+    // NOTE: Game.initRun calls resetHoleCountDown() per curve in sorted
+    // order *after* setSimRng has been applied. Drawing here would use
+    // whatever rand state existed at construction time, which on the
+    // host is pre-seed (Date.now())  but on the joiner is post-seed —
+    // so initial holeCountDown values would diverge between peers and
+    // every later hole would be in a different place.
 };
 
 OiSving.Curve.prototype.drawNextFrame = function() {

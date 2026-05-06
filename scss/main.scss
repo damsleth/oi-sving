@@ -562,48 +562,43 @@ p {
     height: 100%;
 }
 
-#waiting-host-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.85);
+#waiting-host-banner {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
-    color: #ddd;
+    gap: 8px;
+    padding: 8px 16px;
+    margin-bottom: 8px;
+    background: rgba(213, 169, 47, 0.18);
+    color: #d5a92f;
+    border: 1px solid rgba(213, 169, 47, 0.35);
+    border-radius: 4px;
+    font-size: 13px;
     text-align: center;
-    font-family: inherit;
 
-    // The id selector outranks the global `.hidden { display: none }` rule
-    // so the overlay would render on first load until the user joined a
-    // room. Override here so the hidden class actually hides it. Single-
-    // player and host flows never call showWaitingForHost(), so this is
-    // the only way the overlay disappears outside an active joiner state.
+    // ID selector outranks `.hidden { display: none }`; force the override
+    // so the banner is genuinely hidden until showWaitingForHost runs.
     &.hidden {
         display: none;
     }
 
-    .waiting-host-content {
-        max-width: 480px;
-        padding: 32px 48px;
+    .waiting-host-banner-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: waitingHostPulse 1.4s ease-in-out infinite;
+    }
 
-        h2 {
-            font-size: 32px;
-            margin: 0 0 12px;
-            font-weight: 600;
-        }
-
-        p {
-            font-size: 16px;
-            opacity: 0.7;
-            margin: 0;
-        }
+    .waiting-host-banner-text {
+        font-weight: 500;
+        letter-spacing: 0.3px;
     }
 }
 
-body:not(.dark-theme) #waiting-host-overlay {
-    background: rgba(247, 246, 242, 0.92);
-    color: #3F3E37;
+@keyframes waitingHostPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
 }
 
 #lightbox-content .deathmatch h1 {

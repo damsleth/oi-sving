@@ -29,6 +29,10 @@
                     <tr>
                         <td>
                             <div id='menu'>
+                                <div id='waiting-host-banner' class='hidden'>
+                                    <span class='waiting-host-banner-dot'></span>
+                                    <span class='waiting-host-banner-text'>Waiting for host to start the game</span>
+                                </div>
                                 <div id='menu-intro' class='light'>
                                     <h4>Choose players using your mouse or the keyboard and hit <strong>SPACE</strong> to start the game!</h4>
                                 </div>
@@ -98,13 +102,6 @@
                 <p>Thanks to <a href='https://twitter.com/Cutting_Class' target='_blank'>Grant Robertson</a> for creating the music and sound effects.</p>
                 <br>
                 <a href='#' title='Close credits overlay' onclick='OiSving.Sound.onCreditsCloseClicked();' class='button'>Close</a>
-            </div>
-        </div>
-
-        <div id='waiting-host-overlay' class='hidden'>
-            <div class='waiting-host-content'>
-                <h2>Waiting for host</h2>
-                <p>The host will start the game when ready.</p>
             </div>
         </div>
 

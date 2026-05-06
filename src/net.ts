@@ -943,17 +943,19 @@ OiSving.Net = {
 
   // Joiner-only UI helper. Called from the inline join handler after a
   // successful Net.join so the joiner sees that they have connected and
-  // are now waiting on the host. The 'round-start' listener in
-  // OiSving.Game.init hides the overlay when the host kicks the round off.
+  // are now waiting on the host. Renders inline above the player list
+  // (NOT a blocking modal) so the joiner can still pick a color while
+  // waiting. The 'round-start' listener in OiSving.Game.init hides it
+  // when the host kicks the round off.
   showWaitingForHost(): void {
     if (typeof document === 'undefined') return
-    const el = document.getElementById('waiting-host-overlay')
+    const el = document.getElementById('waiting-host-banner')
     if (el) el.classList.remove('hidden')
   },
 
   hideWaitingForHost(): void {
     if (typeof document === 'undefined') return
-    const el = document.getElementById('waiting-host-overlay')
+    const el = document.getElementById('waiting-host-banner')
     if (el) el.classList.add('hidden')
   },
 
