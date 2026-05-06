@@ -67,6 +67,7 @@ OiSving.Menu = {
             OiSving.Net.on('connection-state', function() {
                 OiSving.Menu.refreshStartGameButton();
                 OiSving.Menu.refreshHostButton();
+                OiSving.Menu.refreshJoinButton();
             });
             OiSving.Net.on('peer-online', function() {
                 OiSving.Menu.refreshHostPeers();
@@ -79,11 +80,13 @@ OiSving.Menu = {
                 // so the menu UI flips back to "Host Game" / "Join Game".
                 if (OiSving.Net.leaveRoom) OiSving.Net.leaveRoom();
                 OiSving.Menu.refreshHostButton();
+                OiSving.Menu.refreshJoinButton();
                 OiSving.Menu.refreshStartGameButton();
             });
         }
 
         OiSving.Menu.refreshHostButton();
+        OiSving.Menu.refreshJoinButton();
 
         // Net discovery is dormant by default — single-player is assumed
         // until the user clicks Host or Join. revealNetDiscovery starts
@@ -188,6 +191,7 @@ OiSving.Menu = {
             document.getElementById('net-status').innerText = 'Joined ' + normalized;
             OiSving.Net.showWaitingForHost && OiSving.Net.showWaitingForHost();
             OiSving.Menu.refreshStartGameButton();
+            OiSving.Menu.refreshJoinButton();
             // Hide the join form once we've successfully joined a room.
             OiSving.Menu.hideJoinForm();
         }).catch(function(err) {
@@ -209,6 +213,7 @@ OiSving.Menu = {
             document.getElementById('net-status').innerText = '';
             OiSving.Menu.hideJoinForm();
             OiSving.Menu.refreshHostButton();
+            OiSving.Menu.refreshJoinButton();
             OiSving.Menu.refreshStartGameButton();
             OiSving.Menu.refreshAvailableRooms();
             if (wasHosting) return;
@@ -220,6 +225,7 @@ OiSving.Menu = {
         OiSving.Net.host().then(function(c) {
             document.getElementById('net-status').innerText = 'Room: ' + c;
             OiSving.Menu.refreshHostButton();
+            OiSving.Menu.refreshJoinButton();
             OiSving.Menu.refreshStartGameButton();
             OiSving.Menu.refreshAvailableRooms();
         }).catch(function(err) {
@@ -302,9 +308,32 @@ OiSving.Menu = {
     // native prompt() that blocked the room list from appearing until
     // the user dismissed it; now both reveal at once so users can type
     // a code OR pick a discovered room without modal back-and-forth.
+    //
+    // Toggles to "Leave Game" once joined: a second click on the same
+    // button tears down the joined session.
     onJoinGameClicked: function() {
+        var joined = !!(OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost());
+        if (joined) {
+            OiSving.Net.leaveRoom();
+            document.getElementById('net-status').innerText = '';
+            OiSving.Net.hideWaitingForHost && OiSving.Net.hideWaitingForHost();
+            OiSving.Menu.refreshJoinButton();
+            OiSving.Menu.refreshHostButton();
+            OiSving.Menu.refreshStartGameButton();
+            OiSving.Menu.refreshAvailableRooms();
+            return;
+        }
         OiSving.Menu.revealNetDiscovery();
         OiSving.Menu.showJoinForm();
+    },
+
+    refreshJoinButton: function() {
+        var btn = document.getElementById('join-game');
+        if (!btn) return;
+        var joined = !!(OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost());
+        btn.innerText = joined ? 'Leave Game' : 'Join Game';
+        if (joined) btn.classList.add('is-active');
+        else btn.classList.remove('is-active');
     },
 
     showJoinForm: function() {
