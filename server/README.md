@@ -32,13 +32,23 @@ room code, joiners exchange it out-of-band, and the server brokers SDP +
 ICE between host and joiners. Once datachannels are open, signaling is
 no longer on the gameplay data path.
 
-## Cloudflare Workers + Durable Objects
+## Cloudflare Workers + Durable Objects (experimental, not wired up)
+
+> **Status: experimental, currently nonfunctional.** The Worker scaffolding in
+> `server/signaling-worker.ts` and `server/signaling-room.ts` predates the
+> wire-protocol additions (room-code transport, `hostPlayerIds` echo,
+> `peer-joined` payload shape) and does not match what the client sends today.
+> Treat it as a starting point for an edge deployment, not a turnkey one.
+> Track [the relevant review notes][1] before relying on it for anything.
+>
+> The supported signaling path is the bun server above.
 
 `server/signaling-worker.ts` is the deployable Worker entrypoint.
-`server/signaling-room.ts` is a Durable Object that owns one room each
+`server/signaling-room.ts` is a Durable Object meant to own one room each
 (so SDP offer/answer ordering is racefree per room).
 
-Minimal `wrangler.toml`:
+Sketch wrangler config (will need updating once the Worker is brought
+into protocol parity with `signaling-server.ts`):
 
 ```toml
 name = "oi-sving-signaling"
@@ -59,11 +69,13 @@ wrangler dev          # local
 wrangler deploy       # production
 ```
 
-After deploy, set:
+If/when this is fixed, the client sets:
 
 ```js
 OiSving.Config.Net.signalingUrl = 'wss://oi-sving-signaling.<your-account>.workers.dev/ws'
 ```
+
+[1]: ../docs/protocol.md
 
 ## Wire protocol
 
