@@ -33,7 +33,6 @@ import {
   INPUT_RIGHT,
   INPUT_SUPERPOWER,
   type InputBits,
-  type InputProvider,
   setInputProvider,
 } from './input-provider'
 import {
@@ -124,29 +123,10 @@ interface PeerSlot {
   outboundQueue: Array<{ channel: 'control' | 'input'; msg: ArrayBuffer }>
 }
 
-class NetInputProvider implements InputProvider {
-  // Per-player ring of the last `redundancy` (frame, bits) submissions.
-  // Each broadcast packet carries the entire ring so a single drop on
-  // the unordered + maxRetransmits=0 input channel gets repaired by the
-  // next packet. Without this, both peers' InputBuffers diverge as soon
-  // as one packet is lost — exactly the lockstep failure mode the
-  // protocol design called out.
-  private history = new Map<string, Array<{ frameId: number; bits: InputBits }>>()
-  constructor(private buffer: InputBuffer, private inputDelay: number, private redundancy: number = 4) {}
-  get(frameId: number, playerId: string): InputBits {
-    return this.buffer.get(frameId, playerId)
-  }
-  submit(frameId: number, playerId: string, bits: InputBits): void {
-    const scheduled = frameId + this.inputDelay
-    this.buffer.set(scheduled, playerId, bits)
+import { NetInputProvider } from './net-input-provider'
 
-    const ring = this.history.get(playerId) ?? []
-    ring.push({ frameId: scheduled, bits })
-    while (ring.length > this.redundancy) ring.shift()
-    this.history.set(playerId, ring)
-
-    OiSving.Net?.broadcastInputBatch(playerId, ring)
-  }
+const broadcastInputViaNet = (playerId: string, ring: Array<{ frameId: number; bits: InputBits }>) => {
+  OiSving.Net?.broadcastInputBatch(playerId, ring)
 }
 
 // Per-peer cache of locally-computed state-hash gossip values, keyed by
@@ -358,7 +338,7 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // through the lockstep buffer. Host calls startRound() locally and
       // installs the provider there.
       inputBuffer = new InputBuffer()
-      netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy)
+      netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy, broadcastInputViaNet)
       setInputProvider(netProvider)
       // Align this peer's frame counter to the host's so input frame ids
       // line up. Game has not necessarily started yet — once it does its
@@ -925,7 +905,7 @@ OiSving.Net = {
     const allowedMask = playerIdsToMask(allowedIds)
 
     inputBuffer = new InputBuffer()
-    netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy)
+    netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy, broadcastInputViaNet)
     setInputProvider(netProvider)
     broadcast('control', encodeStart({
       seed,
