@@ -167,10 +167,13 @@ OiSving.Menu = {
 
     joinRoomCode: function(code) {
         if (!OiSving.Net || !OiSving.Net.join) return;
-        OiSving.Net.join(String(code).toUpperCase()).then(function() {
-            document.getElementById('net-status').innerText = 'Joined ' + code;
+        var normalized = String(code).toUpperCase();
+        OiSving.Net.join(normalized).then(function() {
+            document.getElementById('net-status').innerText = 'Joined ' + normalized;
             OiSving.Net.showWaitingForHost && OiSving.Net.showWaitingForHost();
             OiSving.Menu.refreshStartGameButton();
+            // Hide the join form once we've successfully joined a room.
+            OiSving.Menu.hideJoinForm();
         }).catch(function(err) {
             document.getElementById('net-status').innerText = 'Join failed: ' + err.message;
         });
@@ -179,6 +182,7 @@ OiSving.Menu = {
     onHostGameClicked: function() {
         if (!OiSving.Net || !OiSving.Net.host) return;
         OiSving.Menu.revealNetDiscovery();
+        OiSving.Menu.hideJoinForm();
         OiSving.Net.host().then(function(c) {
             document.getElementById('net-status').innerText = 'Room: ' + c;
             OiSving.Menu.refreshStartGameButton();
@@ -188,11 +192,39 @@ OiSving.Menu = {
         });
     },
 
+    // Click "Join Game" to expand the join surface — input field + the
+    // available-rooms list — both inline below the menu. Used to be a
+    // native prompt() that blocked the room list from appearing until
+    // the user dismissed it; now both reveal at once so users can type
+    // a code OR pick a discovered room without modal back-and-forth.
     onJoinGameClicked: function() {
         OiSving.Menu.revealNetDiscovery();
-        var c = prompt('Room code');
-        if (!c) return;
-        OiSving.Menu.joinRoomCode(c);
+        OiSving.Menu.showJoinForm();
+    },
+
+    showJoinForm: function() {
+        var form = document.getElementById('join-form');
+        if (form) form.classList.remove('hidden');
+        var input = document.getElementById('join-code-input');
+        if (input) {
+            input.value = '';
+            // Focus on the next frame so any layout reflow from the
+            // class flip has settled.
+            requestAnimationFrame(function() { input.focus(); });
+        }
+    },
+
+    hideJoinForm: function() {
+        var form = document.getElementById('join-form');
+        if (form) form.classList.add('hidden');
+    },
+
+    onJoinFormSubmit: function(event) {
+        if (event && event.preventDefault) event.preventDefault();
+        var input = document.getElementById('join-code-input');
+        var code = input && input.value ? input.value.trim() : '';
+        if (!code) return;
+        OiSving.Menu.joinRoomCode(code);
     },
 
     onStartGameClicked: function() {

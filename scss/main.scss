@@ -99,6 +99,45 @@ p {
     display: none;
 }
 
+#join-form {
+    form {
+        display: flex;
+        gap: 6px;
+        align-items: stretch;
+    }
+
+    input {
+        flex: 1;
+        padding: 8px 10px;
+        border: 1px solid rgba(150, 150, 150, 0.45);
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.05);
+        color: inherit;
+        font-family: monospace;
+        font-size: 16px;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        text-align: center;
+        outline: none;
+
+        &:focus {
+            border-color: #d5a92f;
+        }
+
+        &::placeholder {
+            opacity: 0.4;
+            letter-spacing: 1px;
+            text-transform: none;
+            font-family: inherit;
+        }
+    }
+
+    button.button {
+        border: 0;
+        font: inherit;
+    }
+}
+
 #net-rooms-list {
     margin-top: 6px;
 
