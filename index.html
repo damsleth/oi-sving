@@ -57,11 +57,16 @@
                                 <div id='menu-settings'>
                                     <div id='change-theme' class='button' onclick='OiSving.Theming.toggleTheme()'></div>
                                     <div class='toggle-sound button' onclick='OiSving.Sound.toggleSound()'></div>
-                                    <div id='host-game' class='button' onclick='OiSving.Net.host().then(c => { document.getElementById("net-status").innerText = "Room: " + c }).catch(e => { document.getElementById("net-status").innerText = "Host failed: " + e.message })'>Host Game</div>
-                                    <div id='join-game' class='button' onclick='var c = prompt("Room code"); if (c) OiSving.Net.join(c.toUpperCase()).then(() => { document.getElementById("net-status").innerText = "Joined " + c.toUpperCase(); OiSving.Net.showWaitingForHost && OiSving.Net.showWaitingForHost() }).catch(e => { document.getElementById("net-status").innerText = "Join failed: " + e.message })'>Join Game</div>
+                                    <div id='start-game' class='button disabled' onclick='OiSving.Menu.onStartGameClicked()'>Start Game</div>
+                                    <div id='host-game' class='button' onclick='OiSving.Menu.onHostGameClicked()'>Host Game</div>
+                                    <div id='join-game' class='button' onclick='OiSving.Menu.onJoinGameClicked()'>Join Game</div>
                                     <div class='clear'></div>
                                 </div>
                                 <div id='net-status' class='light' style='margin-top:6px;text-align:center;'></div>
+                                <div id='net-rooms' class='light' style='margin-top:8px;'>
+                                    <div id='net-rooms-title' style='text-align:center;font-size:12px;opacity:0.6;text-transform:uppercase;letter-spacing:1px;'>Available games on this network</div>
+                                    <div id='net-rooms-list'></div>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -77,7 +82,7 @@
                     <div id='player-scores'></div>
 
                     <div id='game-settings'>
-                        <a id='button-menu' href='#' onclick='OiSving.reload(); return false;' title='Go back to the menu' class='button'>menu</a>
+                        <a id='button-menu' href='#' onclick='OiSving.Game.onMenuButtonClicked(); return false;' title='Go back to the menu' class='button'>menu</a>
                         <div class='toggle-sound button' onclick='OiSving.Sound.toggleSound()'></div>
                     </div>
                 </div>

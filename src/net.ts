@@ -38,11 +38,19 @@ import {
 
 const MSG_START = 0x01
 const MSG_INPUT = 0x02
-const MSG_PING = 0x03
+// MSG_PING reserved (0x03)
 const MSG_LEAVE = 0x04
 const MSG_STATE_HASH = 0x05
 const MSG_PAUSE = 0x06
 const MSG_UNPAUSE = 0x07
+// Roster sync. Host is authoritative for which colors are claimed by which
+// peer. Joiners send MSG_CLAIM/MSG_RELEASE; the host validates against its
+// authoritative state and rebroadcasts MSG_ROSTER to every peer. Peers
+// reconcile their local menus from the broadcast — i.e. the host's reply
+// is the ground truth, joiner-side optimistic updates are corrected.
+const MSG_ROSTER = 0x08
+const MSG_CLAIM = 0x09
+const MSG_RELEASE = 0x0a
 
 export interface RosterEntry {
   peerId: string
@@ -57,7 +65,17 @@ export interface NetEvents {
   'state-hash-mismatch': (frameId: number, expected: number, actual: number) => void
   'pause': () => void
   'unpause': () => void
+  'roster-update': (snapshot: RosterSnapshot) => void
   'connection-state': (state: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed') => void
+}
+
+// Authoritative roster broadcast by the host on every claim/release/leave.
+// Joiners overwrite their local view with this; menus and lock states are
+// rebuilt from it.
+export interface RosterSnapshot {
+  hostPeerId: string
+  hostPlayerIds: string[]
+  joiners: Array<{ peerId: string; playerIds: string[] }>
 }
 
 type EventName = keyof NetEvents
@@ -242,11 +260,6 @@ function getActivePlayerIds(): string[] {
     .map((p: { getId: () => string }) => p.getId())
 }
 
-function requireLocalPlayerIds(): string[] {
-  const ids = getActivePlayerIds()
-  if (ids.length === 0) throw new Error('activate at least one player first')
-  return ids
-}
 
 function getNetConfig() {
   const sameOriginSignalingUrl = () => {
@@ -364,6 +377,24 @@ function encodeUnpause(): ArrayBuffer {
   return buf
 }
 
+// Roster + claim/release messages carry a JSON payload after the type byte.
+// JSON is overkill for size but the channel is reliable and these fire only
+// on roster changes (small, infrequent), so the simplicity wins.
+function encodeJsonMsg(type: number, payload: unknown): ArrayBuffer {
+  const json = JSON.stringify(payload)
+  const bytes = new TextEncoder().encode(json)
+  const buf = new ArrayBuffer(1 + bytes.byteLength)
+  new Uint8Array(buf, 0, 1)[0] = type
+  new Uint8Array(buf, 1).set(bytes)
+  return buf
+}
+
+function decodeJsonMsg(msg: ArrayBuffer): unknown {
+  const view = new Uint8Array(msg, 1)
+  const json = new TextDecoder().decode(view)
+  try { return JSON.parse(json) } catch { return null }
+}
+
 function encodeStateHash(frameId: number, hash: number): ArrayBuffer {
   const buf = new ArrayBuffer(1 + 4 + 4)
   const v = new DataView(buf)
@@ -384,7 +415,7 @@ function byteToPlayerId(b: number): string {
   return PLAYER_ID_TABLE[b] ?? 'red'
 }
 
-function dispatch(msg: ArrayBuffer): void {
+function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
   const v = new DataView(msg)
   const type = v.getUint8(0)
   switch (type) {
@@ -452,6 +483,30 @@ function dispatch(msg: ArrayBuffer): void {
       events.emit('unpause')
       return
     }
+    case MSG_ROSTER: {
+      // Authoritative roster from host. Clobber local view and re-emit
+      // player-joined/left for the diff so menu lock state reconciles.
+      const snapshot = decodeJsonMsg(msg) as RosterSnapshot | null
+      if (snapshot && typeof snapshot === 'object') applyRosterSnapshot(snapshot)
+      return
+    }
+    case MSG_CLAIM: {
+      // Joiner asked to claim a player id. Host validates and rebroadcasts
+      // the roster. Joiners receiving this would have nothing to do —
+      // claim is a request to the host, not a state change in itself.
+      if (!isHost || !fromSlot) return
+      const claim = decodeJsonMsg(msg) as { playerId?: string } | null
+      if (!claim?.playerId) return
+      hostHandleClaim(fromSlot.peerId, claim.playerId)
+      return
+    }
+    case MSG_RELEASE: {
+      if (!isHost || !fromSlot) return
+      const rel = decodeJsonMsg(msg) as { playerId?: string } | null
+      if (!rel?.playerId) return
+      hostHandleRelease(fromSlot.peerId, rel.playerId)
+      return
+    }
     case MSG_STATE_HASH: {
       // Compare against local hash if available. Mismatch is emitted as
       // an event; the round can choose to abort to lobby (the simpler
@@ -483,7 +538,7 @@ function attachDataChannel(slot: PeerSlot, ch: RTCDataChannel, label: 'control' 
   })
   ch.addEventListener('message', evt => {
     if (typeof evt.data === 'string') return
-    dispatch(evt.data as ArrayBuffer)
+    dispatch(evt.data as ArrayBuffer, slot)
   })
 }
 
@@ -507,6 +562,130 @@ function broadcast(channel: 'control' | 'input', msg: ArrayBuffer): void {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Roster authority. Host owns the truth; joiners send claim/release requests
+// and reconcile from the broadcast snapshot. The host never trusts a
+// joiner's local view.
+// ---------------------------------------------------------------------------
+
+function buildRosterSnapshot(): RosterSnapshot {
+  return {
+    hostPeerId: isHost ? localPeerId : (hostPeerIdFromJoinerView ?? ''),
+    hostPlayerIds: isHost ? [...localPlayerIds] : [...(remotePlayerIdsByPeer.get(hostPeerIdFromJoinerView ?? '') ?? [])],
+    joiners: isHost
+      ? [...remotePlayerIdsByPeer.entries()].map(([peerId, playerIds]) => ({ peerId, playerIds: [...playerIds] }))
+      : [{ peerId: localPeerId, playerIds: [...localPlayerIds] }],
+  }
+}
+
+function broadcastRoster(): void {
+  if (!isHost) return
+  const snap = buildRosterSnapshot()
+  broadcast('control', encodeJsonMsg(MSG_ROSTER, snap))
+  // Host emits its own roster-update locally too so its menu reconciles
+  // off the same code path joiners use.
+  events.emit('roster-update', snap)
+}
+
+function rosterContainsPlayerId(playerId: string): { peerId: string } | null {
+  if (isHost) {
+    if (localPlayerIds.includes(playerId)) return { peerId: localPeerId }
+    for (const [peerId, ids] of remotePlayerIdsByPeer) {
+      if (ids.includes(playerId)) return { peerId }
+    }
+  } else {
+    for (const [peerId, ids] of remotePlayerIdsByPeer) {
+      if (ids.includes(playerId)) return { peerId }
+    }
+    if (localPlayerIds.includes(playerId)) return { peerId: localPeerId }
+  }
+  return null
+}
+
+function getAllowedPlayerIds(): string[] {
+  const cfgPlayers = OiSving.Config?.Players
+  return Array.isArray(cfgPlayers) ? cfgPlayers.map((p: { id: string }) => p.id) : [...PLAYER_ID_TABLE]
+}
+
+function hostHandleClaim(fromPeerId: string, playerId: string): void {
+  if (!isHost) return
+  if (!getAllowedPlayerIds().includes(playerId)) {
+    // Reject silently; rebroadcast roster so the requester reverts.
+    broadcastRoster()
+    return
+  }
+  if (rosterContainsPlayerId(playerId)) {
+    broadcastRoster()
+    return
+  }
+  if (fromPeerId === localPeerId) {
+    if (!localPlayerIds.includes(playerId)) localPlayerIds.push(playerId)
+  } else {
+    const existing = remotePlayerIdsByPeer.get(fromPeerId) ?? []
+    if (!existing.includes(playerId)) {
+      remotePlayerIdsByPeer.set(fromPeerId, [...existing, playerId])
+    }
+  }
+  broadcastRoster()
+}
+
+function hostHandleRelease(fromPeerId: string, playerId: string): void {
+  if (!isHost) return
+  if (fromPeerId === localPeerId) {
+    localPlayerIds = localPlayerIds.filter(id => id !== playerId)
+  } else {
+    const existing = remotePlayerIdsByPeer.get(fromPeerId)
+    if (existing) {
+      remotePlayerIdsByPeer.set(fromPeerId, existing.filter(id => id !== playerId))
+    }
+  }
+  broadcastRoster()
+}
+
+function applyRosterSnapshot(snap: RosterSnapshot): void {
+  // Joiner-side reconcile. Compute diff vs current view, apply, emit
+  // player-joined/left so menu lock state catches up.
+  const previousRemote = new Map<string, string[]>(remotePlayerIdsByPeer)
+  const previousLocal = [...localPlayerIds]
+
+  remotePlayerIdsByPeer.clear()
+  if (snap.hostPeerId && snap.hostPeerId !== localPeerId) {
+    remotePlayerIdsByPeer.set(snap.hostPeerId, [...(snap.hostPlayerIds ?? [])])
+    hostPeerIdFromJoinerView = snap.hostPeerId
+  }
+  for (const j of snap.joiners ?? []) {
+    if (j.peerId === localPeerId) {
+      // Host says my new local ids are these. Trust it.
+      localPlayerIds = [...(j.playerIds ?? [])]
+    } else {
+      remotePlayerIdsByPeer.set(j.peerId, [...(j.playerIds ?? [])])
+    }
+  }
+  // If host did not include this peer at all, our local roster collapses.
+  if (!snap.joiners?.some(j => j.peerId === localPeerId) && !isHost) {
+    localPlayerIds = []
+  }
+
+  const previousRemoteFlat = new Set([...previousRemote.values()].flat())
+  const currentRemoteFlat = new Set([...remotePlayerIdsByPeer.values()].flat())
+  for (const id of previousRemoteFlat) {
+    if (!currentRemoteFlat.has(id)) events.emit('player-left', { peerId: '', playerId: id, isLocal: false })
+  }
+  for (const id of currentRemoteFlat) {
+    if (!previousRemoteFlat.has(id)) events.emit('player-joined', { peerId: '', playerId: id, isLocal: false })
+  }
+  // Local-side: surface revoked/added ids so menu visuals match host truth.
+  for (const id of previousLocal) {
+    if (!localPlayerIds.includes(id)) events.emit('player-left', { peerId: localPeerId, playerId: id, isLocal: true })
+  }
+  for (const id of localPlayerIds) {
+    if (!previousLocal.includes(id)) events.emit('player-joined', { peerId: localPeerId, playerId: id, isLocal: true })
+  }
+  events.emit('roster-update', snap)
+}
+
+let hostPeerIdFromJoinerView: string | null = null
 
 // ---------------------------------------------------------------------------
 // Public OiSving.Net surface. Game/Menu/Curve consume this object.
@@ -539,8 +718,11 @@ OiSving.Net = {
 
   async host(): Promise<string> {
     const cfg = getNetConfig()
-    localPlayerIds = requireLocalPlayerIds()
+    // Host can run with zero local players ("host-only mode"). The
+    // ≥2-players gate is enforced in startRound, not here.
+    localPlayerIds = getActivePlayerIds()
     remotePlayerIdsByPeer.clear()
+    hostPeerIdFromJoinerView = null
     isHost = true
     localPeerId = genPeerId()
     signalingSocket = openSignaling(cfg.signalingUrl)
@@ -560,6 +742,20 @@ OiSving.Net = {
           for (const playerId of playerIds) {
             events.emit('player-joined', { peerId: data.peerId, playerId, isLocal: false })
           }
+          // Send the new joiner the authoritative roster as soon as the
+          // RTC channel comes up. flushOutbound replays this if the
+          // datachannel is not open yet.
+          broadcastRoster()
+        } else if (data.type === 'peer-left') {
+          // Joiner navigated away or refreshed. Surface as player-left so
+          // menus unlock that color, and rebroadcast the new roster so
+          // every other peer sees the same authoritative state.
+          const departedPlayerIds = remotePlayerIdsByPeer.get(data.peerId) ?? []
+          remotePlayerIdsByPeer.delete(data.peerId)
+          for (const playerId of departedPlayerIds) {
+            events.emit('player-left', { peerId: data.peerId, playerId, isLocal: false })
+          }
+          broadcastRoster()
         } else if (data.type === 'offer') {
           await handleOffer(data.from, data.sdp, ws)
         } else if (data.type === 'ice') {
@@ -575,8 +771,11 @@ OiSving.Net = {
 
   async join(code: string): Promise<void> {
     const cfg = getNetConfig()
-    localPlayerIds = requireLocalPlayerIds()
+    // Joiner can connect with zero local players. New flow: connect first,
+    // see which colors are taken in the host-broadcast roster, then claim.
+    localPlayerIds = getActivePlayerIds()
     remotePlayerIdsByPeer.clear()
+    hostPeerIdFromJoinerView = null
     isHost = false
     localPeerId = genPeerId()
     roomCode = code
@@ -591,11 +790,22 @@ OiSving.Net = {
         if (data.type === 'joined') {
           const hostPlayerIds = normalizePlayerIds(data.hostPlayerIds)
           remotePlayerIdsByPeer.set(data.hostId, hostPlayerIds)
+          hostPeerIdFromJoinerView = data.hostId
           for (const playerId of hostPlayerIds) {
             events.emit('player-joined', { peerId: data.hostId, playerId, isLocal: false })
           }
           await initiateConnection(data.hostId, ws)
           resolve()
+        } else if (data.type === 'host-gone') {
+          // Server drops the room when the host disconnects. Surface a
+          // connection-closed signal so UI can fall back to the menu.
+          setConnState('closed')
+          for (const ids of remotePlayerIdsByPeer.values()) {
+            for (const playerId of ids) {
+              events.emit('player-left', { peerId: '', playerId, isLocal: false })
+            }
+          }
+          remotePlayerIdsByPeer.clear()
         } else if (data.type === 'answer') {
           const slot = peers.get(data.from)
           if (slot) await slot.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })
@@ -608,6 +818,54 @@ OiSving.Net = {
       })
       ws.addEventListener('error', reject)
     })
+  },
+
+  // Joiner-side: tell the host we want a color. Host validates and
+  // rebroadcasts the roster. Host-side: directly accept the claim and
+  // rebroadcast (no roundtrip needed).
+  claimPlayer(playerId: string): void {
+    if (isHost) {
+      hostHandleClaim(localPeerId, playerId)
+      return
+    }
+    broadcast('control', encodeJsonMsg(MSG_CLAIM, { playerId }))
+  },
+
+  releasePlayer(playerId: string): void {
+    if (isHost) {
+      hostHandleRelease(localPeerId, playerId)
+      return
+    }
+    broadcast('control', encodeJsonMsg(MSG_RELEASE, { playerId }))
+  },
+
+  // ≥2 players combined (local + remote) is required to start a round.
+  // UI uses this to enable/disable the Start Game button.
+  canStartRound(): boolean {
+    if (!isHost) return false
+    const total = localPlayerIds.length + [...remotePlayerIdsByPeer.values()].reduce((acc, ids) => acc + ids.length, 0)
+    return total >= 2
+  },
+
+  // Fetch active rooms from the LAN signaling server. Same origin by
+  // default; a custom signalingUrl maps ws:// → http:// for the GET.
+  async listRooms(): Promise<Array<{ code: string; hostPlayerIds: string[]; joinerCount: number }>> {
+    const cfg = getNetConfig()
+    const wsUrl = cfg.signalingUrl
+    let httpUrl: string
+    if (typeof window !== 'undefined' && window.location && (!wsUrl || wsUrl.startsWith('ws') === false)) {
+      httpUrl = `${window.location.origin}/rooms`
+    } else {
+      httpUrl = wsUrl.replace(/^wss?:\/\//, (m: string) => (m === 'wss://' ? 'https://' : 'http://')).replace(/\/$/, '') + '/rooms'
+    }
+    try {
+      const res = await fetch(httpUrl, { cache: 'no-store' })
+      if (!res.ok) return []
+      const body = await res.json() as { rooms?: Array<{ code: string; hostPlayerIds: string[]; joinerCount: number }> }
+      return body.rooms ?? []
+    } catch {
+      return []
+    }
   },
 
   startRound(seed: number, arenaWidth: number, arenaHeight: number, startFrame = 0): void {

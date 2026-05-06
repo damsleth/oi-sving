@@ -126,6 +126,25 @@ const server = Bun.serve<{ peerId?: string; code?: string }>({
         headers: { 'content-type': 'application/json' },
       })
     }
+    if (url.pathname === '/rooms') {
+      // LAN discovery: list active rooms with their host's claimed colors
+      // and joiner count. Clients poll this to render an "available games"
+      // list under the menu. CORS open since the server only ever speaks
+      // on the local network — anyone who can reach this endpoint already
+      // has a route to the WebSocket.
+      const list = [...rooms.values()].map(r => ({
+        code: r.code,
+        hostPlayerIds: r.host.playerIds,
+        joinerCount: r.joiners.size,
+      }))
+      return new Response(JSON.stringify({ rooms: list }), {
+        headers: {
+          'content-type': 'application/json',
+          'access-control-allow-origin': '*',
+          'cache-control': 'no-store',
+        },
+      })
+    }
 
     const path = staticPath(url)
     if (!path) return new Response('Not found\n', { status: 404 })

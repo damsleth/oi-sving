@@ -89,8 +89,40 @@ p {
     background: #D9D6CB;
 }
 
+.button.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .hidden {
     display: none;
+}
+
+#net-rooms-list {
+    margin-top: 6px;
+
+    .net-room-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 12px;
+        margin-top: 4px;
+        font-size: 13px;
+        cursor: pointer;
+
+        .net-room-code {
+            font-weight: 600;
+            font-family: monospace;
+            letter-spacing: 1px;
+        }
+
+        .net-room-meta {
+            opacity: 0.6;
+            font-size: 11px;
+            text-transform: lowercase;
+        }
+    }
 }
 
 .clear {

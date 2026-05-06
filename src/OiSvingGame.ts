@@ -243,6 +243,17 @@ OiSving.Game = {
         if ( !this.isRoundStarted && this.deathMatch) return this.startDeathMatch();
     },
 
+    onMenuButtonClicked: function() {
+        // Joiners cannot eject from a live multiplayer session via the menu
+        // button — that would tear down the WebRTC channel and leave the
+        // host with a phantom roster slot. Host can always reload to end
+        // their own room.
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) {
+            return;
+        }
+        OiSving.reload();
+    },
+
     togglePause: function() {
         if ( this.isPaused ) {
             this.endPause();
@@ -294,6 +305,19 @@ OiSving.Game = {
         this.addPlayers();
         this.addWindowListeners();
         this.renderPlayerScores();
+
+        // Joiners cannot eject from the round, so visually disable the
+        // back-to-menu button. Host keeps it as a force-quit affordance.
+        var menuBtn = document.getElementById('button-menu');
+        if (menuBtn) {
+            if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && !OiSving.Net.isHost()) {
+                menuBtn.classList.add('disabled');
+                menuBtn.setAttribute('title', 'Joiners cannot leave a live game');
+            } else {
+                menuBtn.classList.remove('disabled');
+                menuBtn.setAttribute('title', 'Go back to the menu');
+            }
+        }
 
         this.startNewRound.bind(this);
     },

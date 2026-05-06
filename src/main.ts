@@ -26,4 +26,18 @@ import './OiSving'
 import './net'
 
 document.addEventListener('DOMContentLoaded', () => OiSving.init())
+
+// Warn before navigating away from a live multiplayer session — refreshing
+// or closing the tab tears down the WebRTC channel and the host has no
+// graceful way to recover the joiner. Returning a string from the handler
+// triggers the browser's "Leave site?" confirm in every supporting engine.
+window.addEventListener('beforeunload', (event: BeforeUnloadEvent) => {
+  if (OiSving.Net && typeof OiSving.Net.isActive === 'function' && OiSving.Net.isActive()) {
+    event.preventDefault()
+    event.returnValue = 'You are connected to a multiplayer game. Leaving now will drop you from the room.'
+    return event.returnValue
+  }
+  return undefined
+})
+
 window.addEventListener('beforeunload', () => OiSving.onUnload())

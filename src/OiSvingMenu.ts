@@ -46,14 +46,140 @@ OiSving.Menu = {
 
         if (OiSving.Net && OiSving.Net.on) {
             OiSving.Net.on('player-joined', function(entry) {
-                if (entry.isLocal) return;
-                OiSving.Menu.lockRemoteColor(entry.playerId);
+                if (entry.isLocal) {
+                    OiSving.Menu.syncLocalActivation(entry.playerId, true);
+                } else {
+                    OiSving.Menu.lockRemoteColor(entry.playerId);
+                }
+                OiSving.Menu.refreshStartGameButton();
             });
             OiSving.Net.on('player-left', function(entry) {
-                if (entry.isLocal) return;
-                OiSving.Menu.unlockRemoteColor(entry.playerId);
+                if (entry.isLocal) {
+                    OiSving.Menu.syncLocalActivation(entry.playerId, false);
+                } else {
+                    OiSving.Menu.unlockRemoteColor(entry.playerId);
+                }
+                OiSving.Menu.refreshStartGameButton();
+            });
+            OiSving.Net.on('roster-update', function() {
+                OiSving.Menu.refreshStartGameButton();
+            });
+            OiSving.Net.on('connection-state', function() {
+                OiSving.Menu.refreshStartGameButton();
             });
         }
+
+        // Poll the LAN signaling server for active rooms so single-tab
+        // discovery works without typing a code. Hidden while we're in a
+        // round (handled in renderRoomsList).
+        OiSving.Menu.refreshAvailableRooms();
+        OiSving.Menu._roomsPollHandle = setInterval(function() {
+            OiSving.Menu.refreshAvailableRooms();
+        }, 5000);
+
+        OiSving.Menu.refreshStartGameButton();
+    },
+
+    // Host-truth activation: mirror Net's authoritative localPlayerIds
+    // into Player.isActive + DOM classes, without re-broadcasting.
+    syncLocalActivation: function(playerId, active) {
+        var p = OiSving.getPlayer(playerId);
+        if (!p) return;
+        if (active) {
+            if (!p.isActive()) p.setIsActive(true);
+            u.removeClass('inactive', playerId);
+            u.addClass('active', playerId);
+        } else {
+            if (p.isActive()) p.setIsActive(false);
+            u.removeClass('active', playerId);
+            u.addClass('inactive', playerId);
+        }
+    },
+
+    refreshStartGameButton: function() {
+        var btn = document.getElementById('start-game');
+        if (!btn) return;
+        var enabled = false;
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive()) {
+            // Only the host can start in net mode, and only when ≥2
+            // players are claimed across the roster.
+            enabled = !!(OiSving.Net.isHost && OiSving.Net.isHost() && OiSving.Net.canStartRound && OiSving.Net.canStartRound());
+        } else {
+            // Single-player + split-keyboard: ≥2 locally-active players.
+            var active = OiSving.players.filter(function(p) { return p.isActive(); }).length;
+            enabled = active >= 2;
+        }
+        if (enabled) btn.classList.remove('disabled');
+        else btn.classList.add('disabled');
+    },
+
+    refreshAvailableRooms: function() {
+        if (!OiSving.Net || !OiSving.Net.listRooms) return;
+        // Hide the available-games block while we're already connected to
+        // a room — no need to advertise other lobbies in that state.
+        var container = document.getElementById('net-rooms');
+        if (OiSving.Net.isActive && OiSving.Net.isActive()) {
+            if (container) container.style.display = 'none';
+            return;
+        }
+        if (container) container.style.display = '';
+        OiSving.Net.listRooms().then(function(rooms) {
+            OiSving.Menu.renderRoomsList(rooms || []);
+        }).catch(function() {
+            OiSving.Menu.renderRoomsList([]);
+        });
+    },
+
+    renderRoomsList: function(rooms) {
+        var list = document.getElementById('net-rooms-list');
+        if (!list) return;
+        if (!rooms.length) {
+            list.innerHTML = '<div style="text-align:center;font-size:12px;opacity:0.4;padding:6px 0;">no games yet</div>';
+            return;
+        }
+        var html = '';
+        rooms.forEach(function(r) {
+            var taken = (r.hostPlayerIds || []).join(', ') || '(host-only)';
+            html += '<div class="net-room-row button" onclick="OiSving.Menu.joinRoomCode(\'' + r.code + '\')">'
+                + '<span class="net-room-code">' + r.code + '</span>'
+                + '<span class="net-room-meta">' + taken + ' · ' + (r.joinerCount || 0) + ' joined</span>'
+                + '</div>';
+        });
+        list.innerHTML = html;
+    },
+
+    joinRoomCode: function(code) {
+        if (!OiSving.Net || !OiSving.Net.join) return;
+        OiSving.Net.join(String(code).toUpperCase()).then(function() {
+            document.getElementById('net-status').innerText = 'Joined ' + code;
+            OiSving.Net.showWaitingForHost && OiSving.Net.showWaitingForHost();
+            OiSving.Menu.refreshStartGameButton();
+        }).catch(function(err) {
+            document.getElementById('net-status').innerText = 'Join failed: ' + err.message;
+        });
+    },
+
+    onHostGameClicked: function() {
+        if (!OiSving.Net || !OiSving.Net.host) return;
+        OiSving.Net.host().then(function(c) {
+            document.getElementById('net-status').innerText = 'Room: ' + c;
+            OiSving.Menu.refreshStartGameButton();
+            OiSving.Menu.refreshAvailableRooms();
+        }).catch(function(err) {
+            document.getElementById('net-status').innerText = 'Host failed: ' + err.message;
+        });
+    },
+
+    onJoinGameClicked: function() {
+        var c = prompt('Room code');
+        if (!c) return;
+        OiSving.Menu.joinRoomCode(c);
+    },
+
+    onStartGameClicked: function() {
+        var btn = document.getElementById('start-game');
+        if (btn && btn.classList.contains('disabled')) return;
+        OiSving.Menu.onSpaceDown();
     },
 
     lockRemoteColor: function(playerId) {
@@ -284,19 +410,32 @@ OiSving.Menu = {
         if ( OiSving.Menu.isRemoteTaken(playerId) ) return;
         if ( OiSving.getPlayer(playerId).isActive() ) return;
 
+        // Net mode: send the claim through the host. Optimistic local
+        // update — if the host rejects (already taken, not allowed) the
+        // next roster broadcast revokes the activation via syncLocalActivation.
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive()) {
+            OiSving.Net.claimPlayer(playerId);
+        }
+
         OiSving.getPlayer(playerId).setIsActive(true);
 
         u.removeClass('inactive', playerId);
         u.addClass('active', playerId);
+        OiSving.Menu.refreshStartGameButton();
     },
 
     deactivatePlayer: function(playerId) {
         if ( !OiSving.getPlayer(playerId).isActive() ) return;
 
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive()) {
+            OiSving.Net.releasePlayer(playerId);
+        }
+
         OiSving.getPlayer(playerId).setIsActive(false);
 
         u.removeClass('active', playerId);
         u.addClass('inactive', playerId);
+        OiSving.Menu.refreshStartGameButton();
     },
 
     togglePlayerActivation: function(playerId) {
