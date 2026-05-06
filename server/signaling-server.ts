@@ -77,9 +77,17 @@ function send(ws: ServerWebSocket, payload: object): void {
   }
 }
 
+// Allowed player ids. Anything outside this whitelist would have been a
+// canvas-rendering hazard already, but it was also an XSS vector via the
+// /rooms list since the menu used innerHTML to render hostPlayerIds. Reject
+// here at the edge so neither the WS fanout nor the GET /rooms snapshot
+// can carry attacker-controlled strings.
+const PLAYER_ID_TABLE = ['red', 'orange', 'green', 'blue', 'purple', 'pink']
+
 function normalizePlayerIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
-  return [...new Set(value.map(v => String(v)).filter(Boolean))]
+  const allowed = new Set(PLAYER_ID_TABLE)
+  return [...new Set(value.map(v => String(v)).filter(id => allowed.has(id)))]
 }
 
 function gcRooms(): void {

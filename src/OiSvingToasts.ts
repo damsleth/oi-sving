@@ -66,9 +66,19 @@ OiSving.Toasts = {
         if (!this.container) return;
         var toast = document.createElement('div');
         toast.className = 'net-toast net-toast-' + (opts.kind || 'info');
-        toast.innerHTML =
-            '<div class="net-toast-title">' + opts.title + '</div>' +
-            '<div class="net-toast-body">' + opts.body + '</div>';
+        // Use textContent rather than innerHTML — toast bodies include
+        // playerId / address values that originate from peer-supplied
+        // data via the signaling channel. The server now whitelists
+        // player ids on ingest, but the toast surface is the last
+        // place we'd want a script-injection regression to land.
+        var title = document.createElement('div');
+        title.className = 'net-toast-title';
+        title.textContent = String(opts.title || '');
+        var body = document.createElement('div');
+        body.className = 'net-toast-body';
+        body.textContent = String(opts.body || '');
+        toast.appendChild(title);
+        toast.appendChild(body);
         this.container.appendChild(toast);
 
         // Trigger CSS transition by toggling the class on next frame.

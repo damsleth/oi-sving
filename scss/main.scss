@@ -173,6 +173,13 @@ p {
 #net-rooms-list {
     margin-top: 6px;
 
+    .net-room-empty {
+        text-align: center;
+        font-size: 12px;
+        opacity: 0.4;
+        padding: 6px 0;
+    }
+
     .net-room-row {
         display: flex;
         justify-content: space-between;

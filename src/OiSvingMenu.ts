@@ -169,19 +169,40 @@ OiSving.Menu = {
     renderRoomsList: function(rooms) {
         var list = document.getElementById('net-rooms-list');
         if (!list) return;
+        // Build the list with DOM nodes + textContent so any future
+        // server-side regression that lets attacker-controlled strings
+        // through `/rooms` can still not execute script in this browser.
+        // (The server now whitelists player ids on ingest as well, but
+        // belt-and-suspenders is the safer posture for a LAN-exposed UI.)
+        list.textContent = '';
         if (!rooms.length) {
-            list.innerHTML = '<div style="text-align:center;font-size:12px;opacity:0.4;padding:6px 0;">no games yet</div>';
+            var empty = document.createElement('div');
+            empty.className = 'net-room-empty';
+            empty.textContent = 'no games yet';
+            list.appendChild(empty);
             return;
         }
-        var html = '';
         rooms.forEach(function(r) {
-            var taken = (r.hostPlayerIds || []).join(', ') || '(host-only)';
-            html += '<div class="net-room-row button" onclick="OiSving.Menu.joinRoomCode(\'' + r.code + '\')">'
-                + '<span class="net-room-code">' + r.code + '</span>'
-                + '<span class="net-room-meta">' + taken + ' · ' + (r.joinerCount || 0) + ' joined</span>'
-                + '</div>';
+            var row = document.createElement('div');
+            row.className = 'net-room-row button';
+            row.addEventListener('click', function() {
+                OiSving.Menu.joinRoomCode(String(r.code || ''));
+            });
+
+            var code = document.createElement('span');
+            code.className = 'net-room-code';
+            code.textContent = String(r.code || '');
+
+            var meta = document.createElement('span');
+            meta.className = 'net-room-meta';
+            var hostIds = Array.isArray(r.hostPlayerIds) ? r.hostPlayerIds : [];
+            var taken = hostIds.length ? hostIds.join(', ') : '(host-only)';
+            meta.textContent = taken + ' · ' + (r.joinerCount || 0) + ' joined';
+
+            row.appendChild(code);
+            row.appendChild(meta);
+            list.appendChild(row);
         });
-        list.innerHTML = html;
     },
 
     joinRoomCode: function(code) {
@@ -265,28 +286,39 @@ OiSving.Menu = {
         var hosting = !!(OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost());
         if (!hosting) {
             container.classList.add('hidden');
-            list.innerHTML = '';
+            list.textContent = '';
             return;
         }
         var peers = OiSving.Net.getKnownPeers ? OiSving.Net.getKnownPeers() : [];
         if (!peers.length) {
             container.classList.add('hidden');
-            list.innerHTML = '';
+            list.textContent = '';
             return;
         }
         container.classList.remove('hidden');
-        var html = '';
+        // Render with DOM nodes so the hostname value (which comes from a
+        // reverse-DNS lookup against the joiner's source IP) and the
+        // claimed-color list never go through innerHTML.
+        list.textContent = '';
         peers.forEach(function(p) {
             var ids = OiSving.Net.getPlayerIdsForPeer ? OiSving.Net.getPlayerIdsForPeer(p.peerId) : [];
-            var who = ids.length ? ids.join(', ') : 'no color yet';
-            var addr = p.address || 'unknown ip';
-            var host = p.hostname ? ' (' + p.hostname + ')' : '';
-            html += '<div class="host-peer-row">'
-                + '<span class="host-peer-who">' + who + '</span>'
-                + '<span class="host-peer-addr">' + addr + host + '</span>'
-                + '</div>';
+            var row = document.createElement('div');
+            row.className = 'host-peer-row';
+
+            var who = document.createElement('span');
+            who.className = 'host-peer-who';
+            who.textContent = ids.length ? ids.join(', ') : 'no color yet';
+
+            var addr = document.createElement('span');
+            addr.className = 'host-peer-addr';
+            var addrText = p.address || 'unknown ip';
+            if (p.hostname) addrText += ' (' + p.hostname + ')';
+            addr.textContent = addrText;
+
+            row.appendChild(who);
+            row.appendChild(addr);
+            list.appendChild(row);
         });
-        list.innerHTML = html;
     },
 
     // The header text under the player list reflects role:
