@@ -646,6 +646,47 @@ p {
     50% { opacity: 1; }
 }
 
+#hosting-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    margin-bottom: 8px;
+    // Distinct from the amber waiting-host banner: green-cyan so the
+    // host's role is unambiguous at a glance.
+    background: rgba(59, 203, 105, 0.18);
+    color: #3bcb69;
+    border: 1px solid rgba(59, 203, 105, 0.35);
+    border-radius: 4px;
+    font-size: 13px;
+    text-align: center;
+
+    &.hidden {
+        display: none;
+    }
+
+    .hosting-banner-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: waitingHostPulse 1.4s ease-in-out infinite;
+    }
+
+    .hosting-banner-text {
+        font-weight: 500;
+        letter-spacing: 0.3px;
+    }
+
+    #hosting-banner-code {
+        font-family: monospace;
+        letter-spacing: 2px;
+        font-weight: 700;
+        margin-left: 4px;
+    }
+}
+
 #lightbox-content .deathmatch h1 {
     -webkit-animation-name: blinker;
     -webkit-animation-duration: 0.3s;

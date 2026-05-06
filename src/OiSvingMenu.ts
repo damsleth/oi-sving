@@ -228,6 +228,32 @@ OiSving.Menu = {
         btn.innerText = hosting ? 'Stop Hosting' : 'Host Game';
         if (hosting) btn.classList.add('is-active');
         else btn.classList.remove('is-active');
+
+        var banner = document.getElementById('hosting-banner');
+        if (banner) {
+            if (hosting) banner.classList.remove('hidden');
+            else banner.classList.add('hidden');
+            var codeEl = document.getElementById('hosting-banner-code');
+            if (codeEl && OiSving.Net && OiSving.Net.getRoomCode) {
+                codeEl.innerText = OiSving.Net.getRoomCode() || '';
+            }
+        }
+
+        OiSving.Menu.refreshMenuIntro();
+    },
+
+    // The header text under the player list reflects role:
+    // - joiner: only the host can press SPACE, so we set expectations.
+    // - host or single-player: keep the original "hit SPACE to start".
+    refreshMenuIntro: function() {
+        var el = document.getElementById('menu-intro-text');
+        if (!el) return;
+        var isJoiner = !!(OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost());
+        if (isJoiner) {
+            el.innerHTML = 'Choose players, then wait for the host to start the game.';
+        } else {
+            el.innerHTML = 'Choose players using your mouse or the keyboard and hit <strong>SPACE</strong> to start the game!';
+        }
     },
 
     // Click "Join Game" to expand the join surface — input field + the
