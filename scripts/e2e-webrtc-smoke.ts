@@ -218,6 +218,7 @@ try {
   `).then(state => state.layerVisible && state.started && state.running && state.frame > 0 && state.curves.length === 2 ? state : false), 8_000)
 
   console.log(JSON.stringify({ ok: true, code, hostState, joinerState }, null, 2))
+  await teardown(0)
 } catch (err) {
   console.error(JSON.stringify({
     ok: false,
@@ -225,13 +226,34 @@ try {
     hostState: await pageState(host),
     joinerState: await pageState(joiner),
   }, null, 2))
-  throw err
-} finally {
-  host?.close()
-  joiner?.close()
-  chrome?.kill()
-  server.kill()
-  await server.exited.catch(() => {})
-  if (chrome) await chrome.exited.catch(() => {})
-  await rm(profileDir, { recursive: true, force: true })
+  await teardown(1)
+}
+
+async function killProcess(proc: ReturnType<typeof Bun.spawn> | null): Promise<void> {
+  if (!proc) return
+  try { proc.kill() } catch { /* */ }
+  const settled = await Promise.race([
+    proc.exited.then(() => true).catch(() => true),
+    delay(2000).then(() => false),
+  ])
+  if (!settled) {
+    try { proc.kill('SIGKILL') } catch { /* */ }
+    await proc.exited.catch(() => {})
+  }
+}
+
+async function teardown(exitCode: number): Promise<void> {
+  // Close CDP page WebSockets first so their event loops release.
+  // Then kill Chrome + signaling server with a hard fallback after a
+  // 2s grace window — kill() is graceful and Chrome can wedge if a
+  // page has any pending operations. Without the SIGKILL fallback the
+  // script printed "ok" and then hung indefinitely waiting on
+  // process.exited.
+  try { host?.close() } catch { /* */ }
+  try { joiner?.close() } catch { /* */ }
+  await delay(50)
+  await killProcess(chrome)
+  await killProcess(server as unknown as ReturnType<typeof Bun.spawn>)
+  await rm(profileDir, { recursive: true, force: true }).catch(() => {})
+  process.exit(exitCode)
 }
