@@ -85,8 +85,12 @@ OiSving.Config = {
         // Canonical arena dimensions (host issues at start; clients scale
         // their PIXI stage to fit). All collision, spawn, power-up, and
         // hash math runs against these — never the local viewport.
-        arenaWidth: 1280,
-        arenaHeight: 720,
+        // 4:3 — the right-side player-scores panel takes a fixed slice
+        // of the viewport, so a 16:9 arena ends up with a very wide,
+        // shallow play area. 1024x768 fills the available content-left
+        // box more squarely on every common viewport.
+        arenaWidth: 1024,
+        arenaHeight: 768,
         // State-hash gossip interval for drift detection.
         stateHashIntervalFrames: 60,
     },
