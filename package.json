@@ -24,6 +24,7 @@
     "dist": "bun run clean && bun run typecheck && bun run test && bun run build",
     "test:e2e:webrtc": "bun run scripts/e2e-webrtc-smoke.ts",
     "test:e2e:webrtc:long": "bun run scripts/e2e-webrtc-smoke-long.ts",
+    "test:smoke:standalone": "bun run scripts/smoke-standalone.ts",
     "release": "bun run dist",
     "typecheck": "bun x tsc --noEmit",
     "test": "bun test",
