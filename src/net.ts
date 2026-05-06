@@ -67,6 +67,7 @@ export interface NetEvents {
   'pause': () => void
   'unpause': () => void
   'roster-update': (snapshot: RosterSnapshot) => void
+  'host-gone': () => void
   'connection-state': (state: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed') => void
 }
 
@@ -822,15 +823,20 @@ OiSving.Net = {
           await initiateConnection(data.hostId, ws)
           resolve()
         } else if (data.type === 'host-gone') {
-          // Server drops the room when the host disconnects. Surface a
-          // connection-closed signal so UI can fall back to the menu.
-          setConnState('closed')
+          // Server explicitly tells us the host left. Distinct from a
+          // plain WebSocket close (which the server also emits when a
+          // room idles out, well before the host has actually gone).
+          // UI listeners that need to bail to the menu subscribe to
+          // 'host-gone' specifically; 'connection-state' = 'closed' is
+          // not a reliable signal during a long live round.
           for (const ids of remotePlayerIdsByPeer.values()) {
             for (const playerId of ids) {
               events.emit('player-left', { peerId: '', playerId, isLocal: false })
             }
           }
           remotePlayerIdsByPeer.clear()
+          events.emit('host-gone')
+          setConnState('closed')
         } else if (data.type === 'answer') {
           const slot = peers.get(data.from)
           if (slot) await slot.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })

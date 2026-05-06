@@ -25,19 +25,18 @@ OiSving.Toasts = {
             });
         });
 
-        OiSving.Net.on('connection-state', function(state) {
-            // Surfaces host-gone (server fanout) as a closed connection
-            // for joiners. Host's own connection-state never reaches
-            // 'closed' as a result of a joiner leaving, so this is a
-            // joiner-only signal in practice.
-            if (state === 'closed') {
-                OiSving.Toasts.show({
-                    kind: 'warn',
-                    title: 'Disconnected',
-                    body: 'Lost the host. The room is no longer active.',
-                    duration: 8000,
-                });
-            }
+        OiSving.Net.on('host-gone', function() {
+            // Server explicitly told us the host left. Distinct from
+            // 'connection-state' = 'closed', which the server also
+            // emits when a long-running room idles out the signaling
+            // socket post-handshake — we don't want to bother players
+            // with a "lost host" toast just because the WS GC'd.
+            OiSving.Toasts.show({
+                kind: 'warn',
+                title: 'Disconnected',
+                body: 'Lost the host. The room is no longer active.',
+                duration: 8000,
+            });
         });
 
         OiSving.Net.on('state-hash-mismatch', function(frameId) {

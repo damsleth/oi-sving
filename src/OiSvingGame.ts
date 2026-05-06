@@ -93,14 +93,15 @@ OiSving.Game = {
                 OiSving.Game.endPause();
             });
 
-            // Joiner-only: when the host disappears (server fanout
-            // 'host-gone' or any connection-state closure), the round
-            // we were rendering is now invalid — local sim has no
-            // input source for the host's curves and the host's seed
-            // ownership is gone. Stop the tick loop and present a
-            // "host disconnected" prompt that returns to the menu.
-            OiSving.Net.on('connection-state', function(state) {
-                if (state !== 'closed') return;
+            // Joiner-only: react to the explicit 'host-gone' signal
+            // (server fanout when the host's WS actually closes), not
+            // to any 'connection-state' = 'closed'. The signaling
+            // server idle-GCs rooms after 60s of no signaling traffic,
+            // so a long round that's already past the WebRTC handshake
+            // would receive an idle close mid-game — we'd kill the
+            // round prematurely. host-gone is the host-actually-left
+            // signal.
+            OiSving.Net.on('host-gone', function() {
                 if (OiSving.Net.isHost && OiSving.Net.isHost()) return;
                 if (!OiSving.Game.isRoundStarted && !OiSving.Game.isRunning) return;
 
