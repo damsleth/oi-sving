@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
 
 const repoRoot = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const port = Number(process.env.SMOKE_PORT ?? 8795)
-const binaryName = process.platform === 'win32' ? 'oi-sving-signaling.exe' : 'oi-sving-signaling'
+const binaryName = process.platform === 'win32' ? 'oi-sving.exe' : 'oi-sving'
 const builtBinaryPath = join(repoRoot, 'dist/server', binaryName)
 const sandboxDir = join(tmpdir(), `oi-sving-standalone-smoke-${Date.now()}`)
 const sandboxBinary = join(sandboxDir, binaryName)

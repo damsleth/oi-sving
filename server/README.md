@@ -19,7 +19,7 @@ Compile to a standalone executable:
 
 ```sh
 bun run build:standalone
-./dist/server/oi-sving-signaling
+./dist/server/oi-sving
 ```
 
 The executable binds to `0.0.0.0:8787` by default. Override with `BIND_HOST=…`

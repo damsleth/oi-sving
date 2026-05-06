@@ -29,14 +29,14 @@ Optional but recommended before tag:
 Single-player releases ship on the automated gate alone. Multiplayer releases need real-LAN evidence:
 
 1. **Two-device Chrome/Chrome LAN smoke.** Walk through [`docs/qa-lan-smoke.md`](./qa-lan-smoke.md) on two physical devices on the same Wi-Fi or wired LAN. Capture results in `docs/qa-lan-results-YYYY-MM-DD.md` from [`qa-lan-results-template.md`](./qa-lan-results-template.md). Commit alongside the release.
-2. **Standalone executable smoke outside the repo.** Confirm `dist/server/oi-sving-signaling` runs with no repo files present:
+2. **Standalone executable smoke outside the repo.** Confirm `dist/server/oi-sving` runs with no repo files present:
 
    ```sh
    bun run build:standalone
    mkdir -p /tmp/oi-sving-standalone-smoke
-   cp dist/server/oi-sving-signaling /tmp/oi-sving-standalone-smoke/
+   cp dist/server/oi-sving /tmp/oi-sving-standalone-smoke/
    cd /tmp/oi-sving-standalone-smoke
-   ./oi-sving-signaling
+   ./oi-sving
    ```
 
    Hit `http://localhost:8787/health`, then run a host/join browser pair against the standalone binary.

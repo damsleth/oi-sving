@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
 const outDir = join(root, 'dist/server')
-const outFile = join(outDir, process.platform === 'win32' ? 'oi-sving-signaling.exe' : 'oi-sving-signaling')
+const outFile = join(outDir, process.platform === 'win32' ? 'oi-sving.exe' : 'oi-sving')
 const entrypoint = join(root, 'server/signaling-server.ts')
 
 await mkdir(outDir, { recursive: true })

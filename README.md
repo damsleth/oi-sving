@@ -27,7 +27,7 @@ Each release ships a `SHA256SUMS.txt`. Verify with `shasum -a 256 -c SHA256SUMS.
 Override port or bind host as needed:
 
 ```sh
-BIND_HOST=0.0.0.0 PORT=9000 ./oi-sving-signaling
+BIND_HOST=0.0.0.0 PORT=9000 ./oi-sving
 ```
 
 ## Playing

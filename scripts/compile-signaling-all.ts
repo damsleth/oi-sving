@@ -13,12 +13,12 @@ interface Target {
 }
 
 const targets: Target[] = [
-  { bunTarget: 'bun-linux-x64',          archiveSuffix: 'linux-x64',          binaryName: 'oi-sving-signaling' },
-  { bunTarget: 'bun-linux-x64-baseline', archiveSuffix: 'linux-x64-baseline', binaryName: 'oi-sving-signaling' },
-  { bunTarget: 'bun-linux-arm64',        archiveSuffix: 'linux-arm64',        binaryName: 'oi-sving-signaling' },
-  { bunTarget: 'bun-darwin-x64',         archiveSuffix: 'darwin-x64',         binaryName: 'oi-sving-signaling' },
-  { bunTarget: 'bun-darwin-arm64',       archiveSuffix: 'darwin-arm64',       binaryName: 'oi-sving-signaling' },
-  { bunTarget: 'bun-windows-x64',        archiveSuffix: 'windows-x64',        binaryName: 'oi-sving-signaling.exe' },
+  { bunTarget: 'bun-linux-x64',          archiveSuffix: 'linux-x64',          binaryName: 'oi-sving' },
+  { bunTarget: 'bun-linux-x64-baseline', archiveSuffix: 'linux-x64-baseline', binaryName: 'oi-sving' },
+  { bunTarget: 'bun-linux-arm64',        archiveSuffix: 'linux-arm64',        binaryName: 'oi-sving' },
+  { bunTarget: 'bun-darwin-x64',         archiveSuffix: 'darwin-x64',         binaryName: 'oi-sving' },
+  { bunTarget: 'bun-darwin-arm64',       archiveSuffix: 'darwin-arm64',       binaryName: 'oi-sving' },
+  { bunTarget: 'bun-windows-x64',        archiveSuffix: 'windows-x64',        binaryName: 'oi-sving.exe' },
 ]
 
 const root = new URL('..', import.meta.url).pathname

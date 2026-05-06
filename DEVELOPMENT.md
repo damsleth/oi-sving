@@ -47,11 +47,11 @@ The client defaults to same-origin signaling, so when the page is loaded from th
 
 ## Build the standalone binary
 
-`bun run build:standalone` produces `dist/server/oi-sving-signaling` - a single binary with the browser bundle, CSS, sounds, images, and `index.html` all embedded inside. Copy it anywhere and run; nothing else required.
+`bun run build:standalone` produces `dist/server/oi-sving` - a single binary with the browser bundle, CSS, sounds, images, and `index.html` all embedded inside. Copy it anywhere and run; nothing else required.
 
 ```sh
 bun run build:standalone
-./dist/server/oi-sving-signaling
+./dist/server/oi-sving
 ```
 
 ## Cutting a release
@@ -59,7 +59,7 @@ bun run build:standalone
 Maintainers cut a release by tagging `vX.Y.Z` and pushing the tag. GitHub Actions cross-compiles every target via `bun run build:release` and uploads the archives to the [Releases page](https://github.com/damsleth/oi-sving/releases). Local cross-compile is the same command:
 
 ```sh
-bun run build:release   # writes dist/server/release/<target>/oi-sving-signaling
+bun run build:release   # writes dist/server/release/<target>/oi-sving
 ```
 
 ## Cloudflare Workers signaling

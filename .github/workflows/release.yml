@@ -4,9 +4,9 @@ name: release
 # and attach the artifacts to a GitHub Release. Triggered by pushing a tag of
 # the form vX.Y.Z, or manually via the Actions tab.
 #
-# Each archive contains a single `oi-sving-signaling` (or .exe) binary with
+# Each archive contains a single `oi-sving` (or .exe) binary with
 # the browser bundle, CSS, sounds, images, and index.html embedded inside.
-# Run it on a clean machine with no extra files: `./oi-sving-signaling`, then
+# Run it on a clean machine with no extra files: `./oi-sving`, then
 # open http://localhost:8787.
 
 on:
@@ -59,11 +59,11 @@ jobs:
           cd dist/server/release
           for dir in */; do
             target="${dir%/}"
-            archive_base="oi-sving-signaling-${tag_name}-${target}"
+            archive_base="oi-sving-${tag_name}-${target}"
             if [[ "$target" == windows-* ]]; then
-              (cd "$dir" && zip -9 "../../release-archives/${archive_base}.zip" "oi-sving-signaling.exe")
+              (cd "$dir" && zip -9 "../../release-archives/${archive_base}.zip" "oi-sving.exe")
             else
-              tar -C "$dir" -czf "../../release-archives/${archive_base}.tar.gz" "oi-sving-signaling"
+              tar -C "$dir" -czf "../../release-archives/${archive_base}.tar.gz" "oi-sving"
             fi
           done
 
@@ -74,7 +74,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: oi-sving-signaling-${{ steps.package.outputs.tag }}
+          name: oi-sving-${{ steps.package.outputs.tag }}
           path: dist/release-archives/*
           if-no-files-found: error
           retention-days: 30
@@ -90,25 +90,25 @@ jobs:
           body: |
             Standalone single-file Bun executables of the Oi, Sving! LAN signaling/asset server.
 
-            Each archive contains one `oi-sving-signaling` (or `.exe`) with the browser bundle,
+            Each archive contains one `oi-sving` (or `.exe`) with the browser bundle,
             CSS, sounds, images, and `index.html` embedded inside. No external files needed.
 
             ## Usage
 
             Linux/macOS:
             ```sh
-            tar -xzf oi-sving-signaling-${{ github.ref_name }}-<platform>.tar.gz
-            ./oi-sving-signaling
+            tar -xzf oi-sving-${{ github.ref_name }}-<platform>.tar.gz
+            ./oi-sving
             ```
 
             Windows:
             ```powershell
-            Expand-Archive oi-sving-signaling-${{ github.ref_name }}-windows-x64.zip
-            .\oi-sving-signaling.exe
+            Expand-Archive oi-sving-${{ github.ref_name }}-windows-x64.zip
+            .\oi-sving.exe
             ```
 
             Then open http://localhost:8787. Override port or bind host with
-            `BIND_HOST=0.0.0.0 PORT=9000 ./oi-sving-signaling`.
+            `BIND_HOST=0.0.0.0 PORT=9000 ./oi-sving`.
 
             ## Verify
 
