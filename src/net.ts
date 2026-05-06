@@ -183,6 +183,7 @@ function normalizePlayerIds(value: unknown): string[] {
 
 interface HostSimConfig {
   inputDelayFrames: number
+  inputRedundancyFrames: number
   stateHashIntervalFrames: number
   fps: number
   holeInterval: number
@@ -221,6 +222,7 @@ function applyHostConfig(cfg: HostSimConfig): void {
 
   if (cfgRoot.Net) {
     cfgRoot.Net.inputDelayFrames = cfg.inputDelayFrames
+    cfgRoot.Net.inputRedundancyFrames = cfg.inputRedundancyFrames
     cfgRoot.Net.stateHashIntervalFrames = cfg.stateHashIntervalFrames
     cfgRoot.Net.arenaWidth = cfg.arenaWidth
     cfgRoot.Net.arenaHeight = cfg.arenaHeight
@@ -315,6 +317,13 @@ function openSignaling(url: string): WebSocket {
 //   18..19  u16  hole interval randomness (extra random frames added)
 //   20      u8   initial superpower count
 //   21      u8   allowed-player bitmask (bit 0 = red, 1 = orange, ..., 5 = pink)
+//   22      u8   input redundancy frames (entries packed per MSG_INPUT)
+//
+// Backward compat: joiners running an older build still treat byte 22 as
+// "first byte after the packet", so a longer host packet is harmless to
+// them — they fall back to their compiled default redundancy. New
+// joiners receiving an older host's 22-byte packet default to redundancy=4
+// via length-bound decode (see dispatch).
 function encodeStart(
   seed: number,
   arenaWidth: number,
@@ -326,9 +335,10 @@ function encodeStart(
   holeInterval: number,
   holeIntervalRandomness: number,
   initialSuperpowerCount: number,
-  allowedPlayerMask: number
+  allowedPlayerMask: number,
+  inputRedundancyFrames: number
 ): ArrayBuffer {
-  const buf = new ArrayBuffer(22)
+  const buf = new ArrayBuffer(23)
   const v = new DataView(buf)
   v.setUint8(0, MSG_START)
   v.setUint32(1, seed >>> 0)
@@ -342,6 +352,7 @@ function encodeStart(
   v.setUint16(18, holeIntervalRandomness)
   v.setUint8(20, initialSuperpowerCount & 0xff)
   v.setUint8(21, allowedPlayerMask & 0xff)
+  v.setUint8(22, inputRedundancyFrames & 0xff)
   return buf
 }
 
@@ -433,6 +444,11 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       const holeRandom = v.getUint16(18)
       const initialSp = v.getUint8(20)
       const allowedMask = v.getUint8(21)
+      // Length-bounded read for redundancy: pre-2.0.1 hosts only sent 22
+      // bytes. New hosts send 23 (inputRedundancyFrames at byte 22).
+      // Falling back to the joiner's compiled default here keeps the new
+      // joiner readable to those older hosts during a rolling upgrade.
+      const inputRedundancy = msg.byteLength > 22 ? v.getUint8(22) : 4
 
       // Apply host's authoritative simulation config before constructing
       // anything that reads it. Host owns the rules — joiner's compiled
@@ -440,6 +456,7 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // joiner running a slightly different build cannot diverge.
       applyHostConfig({
         inputDelayFrames: inputDelay,
+        inputRedundancyFrames: inputRedundancy,
         stateHashIntervalFrames: hashInterval,
         fps,
         holeInterval,
@@ -456,7 +473,7 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // through the lockstep buffer. Host calls startRound() locally and
       // installs the provider there.
       inputBuffer = new InputBuffer()
-      netProvider = new NetInputProvider(inputBuffer, inputDelay)
+      netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy)
       setInputProvider(netProvider)
       // Align this peer's frame counter to the host's so input frame ids
       // line up. Game has not necessarily started yet — once it does its
@@ -1011,6 +1028,7 @@ OiSving.Net = {
     const gameCfg = cfgRoot.Game ?? {}
     const curveCfg = cfgRoot.Curve ?? {}
     const inputDelay = (netCfg.inputDelayFrames ?? 2) | 0
+    const inputRedundancy = (netCfg.inputRedundancyFrames ?? 4) | 0
     const hashInterval = (netCfg.stateHashIntervalFrames ?? 60) | 0
     const fps = (gameCfg.fps ?? 60) | 0
     const holeInterval = (curveCfg.holeInterval ?? 150) | 0
@@ -1022,12 +1040,13 @@ OiSving.Net = {
     const allowedMask = playerIdsToMask(allowedIds)
 
     inputBuffer = new InputBuffer()
-    netProvider = new NetInputProvider(inputBuffer, inputDelay)
+    netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy)
     setInputProvider(netProvider)
     broadcast('control', encodeStart(
       seed, arenaWidth, arenaHeight, startFrame,
       inputDelay, hashInterval, fps,
       holeInterval, holeRandom, initialSp, allowedMask,
+      inputRedundancy,
     ))
     events.emit('round-start', seed, arenaWidth, arenaHeight, startFrame)
   },

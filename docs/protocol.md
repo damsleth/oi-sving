@@ -63,9 +63,10 @@ Host-authoritative round-start. Sent over control on every round start. Joiners 
 18..19  u16  hole interval randomness (extra random frames added)
 20      u8   initial superpower count
 21      u8   allowed-player bitmask (bit 0 = red, 1 = orange, ..., 5 = pink)
+22      u8   input redundancy frames (entries per MSG_INPUT packet)
 ```
 
-22 bytes fixed.
+23 bytes fixed. Joiners that receive a 22-byte packet from an older host fall back to redundancy=4 — see the length-bound decode in `dispatch`.
 
 ### MSG_INPUT (0x02)
 
