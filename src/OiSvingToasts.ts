@@ -85,6 +85,31 @@ OiSving.Toasts = {
                 duration: 6000,
             });
         });
+
+        OiSving.Net.on('peer-reconnecting', function() {
+            // ICE-restart in flight against this peer. Shown briefly so
+            // the user knows the silence isn't permanent. Coalesce so
+            // a flapping connection produces one rolling banner, not
+            // a stack.
+            OiSving.Toasts.coalesce('peer-reconnecting', {
+                kind: 'warn',
+                title: 'Reconnecting peer...',
+                body: 'WebRTC connection unstable, attempting recovery.',
+                duration: 3000,
+            });
+        });
+
+        OiSving.Net.on('peer-reconnect-failed', function() {
+            // Three ICE restarts in 5s exhausted. The slot is closed;
+            // the round may continue with the remaining peers, or the
+            // host-gone path fires if it was the host that left.
+            OiSving.Toasts.coalesce('peer-reconnect-failed', {
+                kind: 'warn',
+                title: 'Peer disconnected',
+                body: 'Reconnection failed after 3 tries.',
+                duration: 6000,
+            });
+        });
     },
 
     show: function(opts) {

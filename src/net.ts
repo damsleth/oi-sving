@@ -77,6 +77,8 @@ export interface NetEvents {
   'host-gone': () => void
   'host-state-stalled': () => void
   'peer-desync': () => void
+  'peer-reconnecting': (entry: { peerId: string }) => void
+  'peer-reconnect-failed': (entry: { peerId: string }) => void
   'peer-online': (entry: PeerInfo) => void
   'peer-offline': (entry: { peerId: string }) => void
   'connection-state': (state: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed') => void
@@ -151,6 +153,7 @@ interface PeerSlot {
   input: RTCDataChannel | null
   playerId: string
   outboundQueue: Array<{ channel: 'control' | 'input'; msg: ArrayBuffer }>
+  reconnect: PeerReconnectController
 }
 
 import { NetInputProvider } from './net-input-provider'
@@ -164,6 +167,10 @@ import {
 import { decideClaim, decideRelease } from './host-roster-validator'
 import { StateHashCompare } from './state-hash-compare'
 import { HostStateWatchdog } from './host-state-watchdog'
+import {
+  PeerReconnectController,
+  type WebRtcConnectionState,
+} from './peer-reconnect-controller'
 
 function applyHostConfig(cfg: HostSimConfig): void {
   applyHostConfigCore(cfg, OiSving.Config, OiSving.Game)
@@ -861,6 +868,7 @@ OiSving.Net = {
   // to call when not in a room.
   leaveRoom(): void {
     for (const slot of peers.values()) {
+      try { slot.reconnect.stop() } catch { /* */ }
       try { slot.control?.close() } catch { /* */ }
       try { slot.input?.close() } catch { /* */ }
       try { slot.pc.close() } catch { /* */ }
@@ -1033,17 +1041,62 @@ OiSving.Net = {
   INPUT_SUPERPOWER,
 }
 
-async function initiateConnection(remotePeerId: string, ws: WebSocket): Promise<void> {
-  if (peers.has(remotePeerId)) return
-  const pc = makePeerConnection()
-  const slot: PeerSlot = {
+function newSlot(remotePeerId: string, pc: RTCPeerConnection): PeerSlot {
+  return {
     peerId: remotePeerId,
     pc,
     control: null,
     input: null,
     playerId: '',
     outboundQueue: [],
+    reconnect: new PeerReconnectController(),
   }
+}
+
+// Wire the per-peer reconnect controller to the WebRTC connection
+// state and the signaling socket. On 'restart-ice' we kick a fresh
+// offer (with iceRestart) over the existing signaling channel; on
+// 'give-up' we surface peer-reconnect-failed. The slot keeps its
+// data channels alive across the restart - WebRTC reuses them.
+function attachReconnect(slot: PeerSlot, ws: WebSocket): void {
+  slot.pc.addEventListener('connectionstatechange', () => {
+    const s = slot.pc.connectionState as WebRtcConnectionState
+    slot.reconnect.noteState(s)
+  })
+  slot.reconnect.setListener(decision => {
+    if (decision.kind === 'wait-debounce') {
+      events.emit('peer-reconnecting', { peerId: slot.peerId })
+      return
+    }
+    if (decision.kind === 'restart-ice') {
+      events.emit('peer-reconnecting', { peerId: slot.peerId })
+      void (async () => {
+        try {
+          const offer = await slot.pc.createOffer({ iceRestart: true })
+          await slot.pc.setLocalDescription(offer)
+          ws.send(JSON.stringify({ type: 'offer', to: slot.peerId, sdp: offer.sdp }))
+        } catch {
+          // The pc may have been torn down between schedule and run.
+          // Drop quietly; the give-up path will fire on the next
+          // failed/closed transition.
+        }
+      })()
+      return
+    }
+    if (decision.kind === 'give-up') {
+      events.emit('peer-reconnect-failed', { peerId: slot.peerId })
+      try { slot.control?.close() } catch { /* */ }
+      try { slot.input?.close() } catch { /* */ }
+      try { slot.pc.close() } catch { /* */ }
+      peers.delete(slot.peerId)
+    }
+  })
+}
+
+async function initiateConnection(remotePeerId: string, ws: WebSocket): Promise<void> {
+  if (peers.has(remotePeerId)) return
+  const pc = makePeerConnection()
+  const slot = newSlot(remotePeerId, pc)
   peers.set(remotePeerId, slot)
   setConnState('connecting')
 
@@ -1051,6 +1104,7 @@ async function initiateConnection(remotePeerId: string, ws: WebSocket): Promise<
   attachDataChannel(slot, control, 'control')
   const input = pc.createDataChannel('input', { ordered: false, maxRetransmits: 0 })
   attachDataChannel(slot, input, 'input')
+  attachReconnect(slot, ws)
 
   pc.addEventListener('icecandidate', evt => {
     if (evt.candidate) {
@@ -1064,16 +1118,31 @@ async function initiateConnection(remotePeerId: string, ws: WebSocket): Promise<
 }
 
 async function handleOffer(remotePeerId: string, sdp: string, ws: WebSocket): Promise<void> {
-  if (peers.has(remotePeerId)) return
-  const pc = makePeerConnection()
-  const slot: PeerSlot = {
-    peerId: remotePeerId,
-    pc,
-    control: null,
-    input: null,
-    playerId: '',
-    outboundQueue: [],
+  const existing = peers.get(remotePeerId)
+  if (existing) {
+    // ICE-restart path: an offer is arriving for a peer we already
+    // know about. Accept the renegotiation by setting the remote
+    // description on the existing PC and answering, instead of
+    // dropping the offer (which would leave the peer permanently
+    // wedged in disconnected). Only allow the renegotiation when
+    // the existing connection isn't healthy - a fresh offer for a
+    // fully-connected peer is suspicious and dropped.
+    const state = existing.pc.connectionState
+    if (state === 'connected') return
+    try {
+      await existing.pc.setRemoteDescription({ type: 'offer', sdp })
+      const answer = await existing.pc.createAnswer()
+      await existing.pc.setLocalDescription(answer)
+      ws.send(JSON.stringify({ type: 'answer', to: remotePeerId, sdp: answer.sdp }))
+    } catch {
+      // Renegotiation failed; let the controller's give-up path
+      // handle teardown on the next state transition.
+    }
+    return
   }
+
+  const pc = makePeerConnection()
+  const slot = newSlot(remotePeerId, pc)
   peers.set(remotePeerId, slot)
   setConnState('connecting')
 
@@ -1081,6 +1150,7 @@ async function handleOffer(remotePeerId: string, sdp: string, ws: WebSocket): Pr
     if (evt.channel.label === 'control') attachDataChannel(slot, evt.channel, 'control')
     else if (evt.channel.label === 'input') attachDataChannel(slot, evt.channel, 'input')
   })
+  attachReconnect(slot, ws)
   pc.addEventListener('icecandidate', evt => {
     if (evt.candidate) {
       ws.send(JSON.stringify({ type: 'ice', to: remotePeerId, candidate: evt.candidate.toJSON() }))
