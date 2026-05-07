@@ -159,6 +159,7 @@ import {
   peerOwnsPlayerIdFromRoster,
   type PeerChannelState,
 } from './net-guards'
+import { decideClaim, decideRelease } from './host-roster-validator'
 
 function applyHostConfig(cfg: HostSimConfig): void {
   applyHostConfigCore(cfg, OiSving.Config, OiSving.Game)
@@ -538,21 +539,6 @@ function canStartAuthoritativeRound(): boolean {
   return canStartRoundFromState(isHost, localPlayerIds, remotePlayerIdsByPeer, peerChannelStates())
 }
 
-function rosterContainsPlayerId(playerId: string): { peerId: string } | null {
-  if (isHost) {
-    if (localPlayerIds.includes(playerId)) return { peerId: localPeerId }
-    for (const [peerId, ids] of remotePlayerIdsByPeer) {
-      if (ids.includes(playerId)) return { peerId }
-    }
-  } else {
-    for (const [peerId, ids] of remotePlayerIdsByPeer) {
-      if (ids.includes(playerId)) return { peerId }
-    }
-    if (localPlayerIds.includes(playerId)) return { peerId: localPeerId }
-  }
-  return null
-}
-
 function getAllowedPlayerIds(): string[] {
   const cfgPlayers = OiSving.Config?.Players
   return Array.isArray(cfgPlayers) ? cfgPlayers.map((p: { id: string }) => p.id) : [...PLAYER_ID_TABLE]
@@ -560,17 +546,20 @@ function getAllowedPlayerIds(): string[] {
 
 function hostHandleClaim(fromPeerId: string, playerId: string): void {
   if (!isHost) return
-  if (!getAllowedPlayerIds().includes(playerId)) {
+  const decision = decideClaim({
+    fromPeerId,
+    localPeerId,
+    playerId,
+    allowedPlayerIds: new Set(getAllowedPlayerIds()),
+    localPlayerIds,
+    remotePlayerIdsByPeer,
+  })
+  if (decision.kind !== 'accept') {
     // Reject silently; rebroadcast roster so the requester reverts.
     broadcastRoster()
     return
   }
-  if (rosterContainsPlayerId(playerId)) {
-    broadcastRoster()
-    return
-  }
-  const isLocal = fromPeerId === localPeerId
-  if (isLocal) {
+  if (decision.isLocal) {
     if (!localPlayerIds.includes(playerId)) localPlayerIds.push(playerId)
   } else {
     const existing = remotePlayerIdsByPeer.get(fromPeerId) ?? []
@@ -584,29 +573,32 @@ function hostHandleClaim(fromPeerId: string, playerId: string): void {
   // toast surface doesn't fire — so two players could end up picking
   // the same color if the joiner claimed first. Joiners reach the
   // same state via applyRosterSnapshot when the broadcast lands.
-  events.emit('player-joined', { peerId: fromPeerId, playerId, isLocal })
+  events.emit('player-joined', { peerId: fromPeerId, playerId, isLocal: decision.isLocal })
   broadcastRoster()
 }
 
 function hostHandleRelease(fromPeerId: string, playerId: string): void {
   if (!isHost) return
-  const isLocal = fromPeerId === localPeerId
-  let didRelease = false
-  if (isLocal) {
-    if (localPlayerIds.includes(playerId)) {
-      localPlayerIds = localPlayerIds.filter(id => id !== playerId)
-      didRelease = true
-    }
+  const decision = decideRelease({
+    fromPeerId,
+    localPeerId,
+    playerId,
+    localPlayerIds,
+    remotePlayerIdsByPeer,
+  })
+  if (decision.kind === 'no-op') {
+    broadcastRoster()
+    return
+  }
+  if (decision.isLocal) {
+    localPlayerIds = localPlayerIds.filter(id => id !== playerId)
   } else {
     const existing = remotePlayerIdsByPeer.get(fromPeerId)
-    if (existing && existing.includes(playerId)) {
+    if (existing) {
       remotePlayerIdsByPeer.set(fromPeerId, existing.filter(id => id !== playerId))
-      didRelease = true
     }
   }
-  if (didRelease) {
-    events.emit('player-left', { peerId: fromPeerId, playerId, isLocal })
-  }
+  events.emit('player-left', { peerId: fromPeerId, playerId, isLocal: decision.isLocal })
   broadcastRoster()
 }
 
