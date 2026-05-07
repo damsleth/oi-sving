@@ -60,6 +60,31 @@ OiSving.Toasts = {
                 duration: 4000,
             });
         });
+
+        OiSving.Net.on('host-state-stalled', function() {
+            // Joiner watchdog tripped — host snapshots have stopped
+            // landing. Coalesce so a single bad network burst doesn't
+            // produce a stack of toasts.
+            OiSving.Toasts.coalesce('host-state-stalled', {
+                kind: 'warn',
+                title: 'Reconnecting to host...',
+                body: 'Host updates have stopped. Trying to recover.',
+                duration: 3000,
+            });
+        });
+
+        OiSving.Net.on('peer-desync', function() {
+            // Three stalls in 5 seconds — the joiner has been desynced
+            // long enough to give up. The 'host-gone' event fires
+            // alongside this one, so we don't need a separate toast
+            // for the route-to-menu UI; this one names what happened.
+            OiSving.Toasts.coalesce('peer-desync', {
+                kind: 'warn',
+                title: 'Lost sync with host',
+                body: 'Returning to the menu.',
+                duration: 6000,
+            });
+        });
     },
 
     show: function(opts) {

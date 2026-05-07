@@ -75,6 +75,8 @@ export interface NetEvents {
   'unpause': () => void
   'roster-update': (snapshot: RosterSnapshot) => void
   'host-gone': () => void
+  'host-state-stalled': () => void
+  'peer-desync': () => void
   'peer-online': (entry: PeerInfo) => void
   'peer-offline': (entry: { peerId: string }) => void
   'connection-state': (state: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed') => void
@@ -161,6 +163,7 @@ import {
 } from './net-guards'
 import { decideClaim, decideRelease } from './host-roster-validator'
 import { StateHashCompare } from './state-hash-compare'
+import { HostStateWatchdog } from './host-state-watchdog'
 
 function applyHostConfig(cfg: HostSimConfig): void {
   applyHostConfigCore(cfg, OiSving.Config, OiSving.Game)
@@ -175,6 +178,33 @@ const broadcastInputViaNet = (playerId: string, ring: Array<{ frameId: number; b
 // src/state-hash-compare.ts for the why behind the two-map design.
 const HASH_CACHE_RETAIN_FRAMES = 600 // ~10s at 60 fps
 let hashCompare = new StateHashCompare(HASH_CACHE_RETAIN_FRAMES)
+
+// Joiner-side host-state staleness watchdog. Fires 'host-state-stalled'
+// when MSG_HOST_STATE has been silent for >2s during a running round,
+// and 'peer-desync' after 3 stalls within 5s. peer-desync also routes
+// the joiner through the existing host-gone teardown so menu lock
+// state and toasts reconcile via the same code path that handles a
+// real host-disconnect.
+const hostStateWatchdog = new HostStateWatchdog()
+hostStateWatchdog.setListener(event => {
+  if (event.kind === 'host-state-stalled') {
+    events.emit('host-state-stalled')
+    return
+  }
+  if (event.kind === 'peer-desync') {
+    events.emit('peer-desync')
+    // Funnel into the existing host-gone path: clear remote roster,
+    // emit player-left for everyone we knew about, fire host-gone.
+    for (const ids of remotePlayerIdsByPeer.values()) {
+      for (const playerId of ids) {
+        events.emit('player-left', { peerId: '', playerId, isLocal: false })
+      }
+    }
+    remotePlayerIdsByPeer.clear()
+    events.emit('host-gone')
+    setConnState('closed')
+  }
+})
 
 // Module-level mutable state. The singleton matches the existing OiSving
 // module shape; tests inject via OiSving.Net.__setMockSocket.
@@ -326,6 +356,9 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // CURRENT_FRAME_ID will tick from `startFrame`.
       if (OiSving.Game) OiSving.Game.CURRENT_FRAME_ID = start.startFrame
       events.emit('round-start', start.seed, start.arenaWidth, start.arenaHeight, start.startFrame)
+      // Joiner only: arm the host-state watchdog so we surface stalls
+      // if MSG_HOST_STATE stops landing during the running round.
+      if (!isHost) hostStateWatchdog.start()
       return
     }
     case MSG_INPUT: {
@@ -392,6 +425,7 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       const snap = decodeJsonMsg(msg) as HostStateSnapshot | null
       if (snap && typeof snap === 'object') {
         OiSving.Game?.applyHostStateSnapshot?.(snap)
+        hostStateWatchdog.noteHostStateApplied()
       }
       return
     }
@@ -846,6 +880,7 @@ OiSving.Net = {
     inputBuffer = new InputBuffer()
     netProvider = null
     hashCompare.clear()
+    hostStateWatchdog.stop()
     setConnState('idle')
   },
 
