@@ -44,9 +44,9 @@ describe('player id <-> byte', () => {
     expect(playerIdToByte('')).toBe(0xff)
   })
 
-  test('out-of-range byte falls back to red so dispatch never crashes', () => {
-    expect(byteToPlayerId(0xff)).toBe('red')
-    expect(byteToPlayerId(99)).toBe('red')
+  test('out-of-range byte returns null so dispatch can drop the packet', () => {
+    expect(byteToPlayerId(0xff)).toBeNull()
+    expect(byteToPlayerId(99)).toBeNull()
   })
 })
 
@@ -185,9 +185,20 @@ describe('encodeInputBatch / decodeInputBatch', () => {
     expect(decoded.entries.map(e => e.frameId)).toEqual([5, 10, 7])
   })
 
-  test('truncated buffer (<3 bytes) decodes to empty batch without throwing', () => {
-    expect(decodeInputBatch(new ArrayBuffer(0))).toEqual({ playerId: 'red', entries: [] })
-    expect(decodeInputBatch(new ArrayBuffer(2))).toEqual({ playerId: 'red', entries: [] })
+  test('truncated buffer (<3 bytes) decodes to null-playerId empty batch', () => {
+    expect(decodeInputBatch(new ArrayBuffer(0))).toEqual({ playerId: null, entries: [] })
+    expect(decodeInputBatch(new ArrayBuffer(2))).toEqual({ playerId: null, entries: [] })
+  })
+
+  test('out-of-range player byte decodes to null playerId so dispatch drops it', () => {
+    const buf = new ArrayBuffer(8)
+    const v = new DataView(buf)
+    v.setUint8(0, MSG_INPUT)
+    v.setUint8(1, 0xff) // sentinel for unknown player
+    v.setUint8(2, 1)
+    v.setUint32(3, 100)
+    v.setUint8(7, 0b001)
+    expect(decodeInputBatch(buf).playerId).toBeNull()
   })
 
   test('inflated count byte is bounded by buffer length', () => {

@@ -38,8 +38,13 @@ export function playerIdToByte(id: string): number {
   return idx >= 0 ? idx : 0xff
 }
 
-export function byteToPlayerId(b: number): string {
-  return PLAYER_ID_TABLE[b] ?? 'red'
+// Return null for out-of-range bytes so callers can drop the packet
+// instead of treating it as a valid 'red' input. The roster ownership
+// check would have blocked the actual exploit either way (a peer that
+// doesn't own red can't write red), but a silent fallback makes a
+// malformed packet look like valid input at the dispatcher boundary.
+export function byteToPlayerId(b: number): string | null {
+  return PLAYER_ID_TABLE[b] ?? null
 }
 
 export function playerMaskToIds(mask: number): string[] {
@@ -161,13 +166,12 @@ export function encodeInputBatch(playerId: string, entries: InputEntry[]): Array
   return buf
 }
 
-export interface InputBatch { playerId: string; entries: InputEntry[] }
+export interface InputBatch { playerId: string | null; entries: InputEntry[] }
 
 export function decodeInputBatch(msg: ArrayBuffer): InputBatch {
-  // Truncated header (<3 bytes) -> empty batch with sentinel playerId.
-  // Caller drops on roster ownership check anyway, but skipping the
-  // DataView read avoids a RangeError on the type byte itself.
-  if (msg.byteLength < 3) return { playerId: 'red', entries: [] }
+  // Truncated header (<3 bytes) -> empty batch with null playerId.
+  // Caller drops on the null guard before the roster check.
+  if (msg.byteLength < 3) return { playerId: null, entries: [] }
   const v = new DataView(msg)
   const playerId = byteToPlayerId(v.getUint8(1))
   const count = v.getUint8(2)

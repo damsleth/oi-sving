@@ -335,6 +335,10 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // decodeInputBatch bounds the entry loop on actual buffer length,
       // so a malicious peer cannot trigger RangeError via inflated count.
       const batch = decodeInputBatch(msg)
+      // Drop on out-of-range player byte (decodeInputBatch returns null)
+      // so the dispatcher cannot apply input to a fallback color the
+      // sender didn't intend.
+      if (!batch.playerId) return
       // Roster authority: a peer may only submit inputs for players it
       // has been assigned. Drop INPUT messages that don't satisfy that
       // — otherwise a buggy or malicious peer could overwrite somebody
