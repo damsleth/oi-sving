@@ -47,7 +47,6 @@ import {
   MSG_RELEASE,
   MSG_HOST_STATE,
   PLAYER_ID_TABLE,
-  byteToPlayerId,
   playerIdsToMask,
   encodeStart,
   encodeInputBatch,
@@ -56,6 +55,9 @@ import {
   encodeUnpause,
   encodeJsonMsg,
   decodeJsonMsg,
+  decodeStart,
+  decodeInputBatch,
+  decodeStateHash,
 } from './net-protocol'
 
 export interface RosterEntry {
@@ -283,74 +285,63 @@ function openSignaling(url: string): WebSocket {
 // joiners receiving an older host's 22-byte packet default to redundancy=4
 // via length-bound decode (see dispatch).
 function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
+  if (msg.byteLength < 1) return
   const v = new DataView(msg)
   const type = v.getUint8(0)
   switch (type) {
     case MSG_START: {
-      const seed = v.getUint32(1)
-      const arenaWidth = v.getUint16(5)
-      const arenaHeight = v.getUint16(7)
-      const startFrame = v.getUint32(9)
-      const inputDelay = v.getUint8(13)
-      const hashInterval = v.getUint8(14)
-      const fps = v.getUint8(15)
-      const holeInterval = v.getUint16(16)
-      const holeRandom = v.getUint16(18)
-      const initialSp = v.getUint8(20)
-      const allowedMask = v.getUint8(21)
-      // Length-bounded read for redundancy: pre-2.0.1 hosts only sent 22
-      // bytes. New hosts send 23 (inputRedundancyFrames at byte 22).
-      // Falling back to the joiner's compiled default here keeps the new
-      // joiner readable to those older hosts during a rolling upgrade.
-      const inputRedundancy = msg.byteLength > 22 ? v.getUint8(22) : 4
+      // Decoder bails on truncated packets (returns ZERO_START with
+      // arenaWidth=0). Skip apply if width is zero so a malformed packet
+      // can't reset our config to junk.
+      const start = decodeStart(msg)
+      if (start.arenaWidth === 0 || start.arenaHeight === 0) return
 
       // Apply host's authoritative simulation config before constructing
       // anything that reads it. Host owns the rules — joiner's compiled
       // defaults are placeholders we deliberately overwrite here so a
       // joiner running a slightly different build cannot diverge.
       applyHostConfig({
-        inputDelayFrames: inputDelay,
-        inputRedundancyFrames: inputRedundancy,
-        stateHashIntervalFrames: hashInterval,
-        fps,
-        holeInterval,
-        holeIntervalRandomness: holeRandom,
-        initialSuperpowerCount: initialSp,
-        allowedPlayerMask: allowedMask,
-        arenaWidth,
-        arenaHeight,
+        inputDelayFrames: start.inputDelayFrames,
+        inputRedundancyFrames: start.inputRedundancyFrames,
+        stateHashIntervalFrames: start.stateHashIntervalFrames,
+        fps: start.fps,
+        holeInterval: start.holeInterval,
+        holeIntervalRandomness: start.holeIntervalRandomness,
+        initialSuperpowerCount: start.initialSuperpowerCount,
+        allowedPlayerMask: start.allowedPlayerMask,
+        arenaWidth: start.arenaWidth,
+        arenaHeight: start.arenaHeight,
       })
 
-      setSimRng(new Rng(seed))
-      OiSving.Field?.setArenaSize?.(arenaWidth, arenaHeight)
+      setSimRng(new Rng(start.seed))
+      OiSving.Field?.setArenaSize?.(start.arenaWidth, start.arenaHeight)
       // Joiner side: install the network input provider so curves read
       // through the lockstep buffer. Host calls startRound() locally and
       // installs the provider there.
       inputBuffer = new InputBuffer()
-      netProvider = new NetInputProvider(inputBuffer, inputDelay, inputRedundancy, broadcastInputViaNet)
+      netProvider = new NetInputProvider(inputBuffer, start.inputDelayFrames, start.inputRedundancyFrames, broadcastInputViaNet)
       setInputProvider(netProvider)
       // Align this peer's frame counter to the host's so input frame ids
       // line up. Game has not necessarily started yet — once it does its
       // CURRENT_FRAME_ID will tick from `startFrame`.
-      if (OiSving.Game) OiSving.Game.CURRENT_FRAME_ID = startFrame
-      events.emit('round-start', seed, arenaWidth, arenaHeight, startFrame)
+      if (OiSving.Game) OiSving.Game.CURRENT_FRAME_ID = start.startFrame
+      events.emit('round-start', start.seed, start.arenaWidth, start.arenaHeight, start.startFrame)
       return
     }
     case MSG_INPUT: {
       // Batch decode: each packet carries a redundancy window of
       // recent (frame, bits) entries for one player. Setting all of
       // them is idempotent because InputBuffer.set is a write-by-key.
-      const playerId = byteToPlayerId(v.getUint8(1))
-      const count = v.getUint8(2)
+      // decodeInputBatch bounds the entry loop on actual buffer length,
+      // so a malicious peer cannot trigger RangeError via inflated count.
+      const batch = decodeInputBatch(msg)
       // Roster authority: a peer may only submit inputs for players it
       // has been assigned. Drop INPUT messages that don't satisfy that
       // — otherwise a buggy or malicious peer could overwrite somebody
       // else's bits and steer their curve.
-      if (fromSlot && !peerOwnsPlayerId(fromSlot.peerId, playerId)) return
-      for (let i = 0; i < count; i++) {
-        const frameId = v.getUint32(3 + i * 5)
-        const bits = v.getUint8(3 + i * 5 + 4)
-        inputBuffer.set(frameId, playerId, bits)
+      if (fromSlot && !peerOwnsPlayerId(fromSlot.peerId, batch.playerId)) return
+      for (const entry of batch.entries) {
+        inputBuffer.set(entry.frameId, batch.playerId, entry.bits)
       }
       return
     }
@@ -409,8 +400,11 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // That's a guaranteed false positive even when the simulation is
       // perfectly deterministic. Each peer caches its own gossip hash
       // in localHashByFrame so this comparison is always frame-aligned.
-      const frameId = v.getUint32(1)
-      const remoteHash = v.getUint32(5)
+      // decodeStateHash returns zeros on a truncated buffer, which is
+      // harmless: we only emit a mismatch when localHashByFrame has an
+      // entry for that frame, and frame 0 won't exist in our cache.
+      if (msg.byteLength < 9) return
+      const { frameId, hash: remoteHash } = decodeStateHash(msg)
       const myHashAtFrame = localHashByFrame.get(frameId)
       if (typeof myHashAtFrame === 'number') {
         if (myHashAtFrame !== remoteHash) {

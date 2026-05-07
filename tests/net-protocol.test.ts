@@ -140,6 +140,17 @@ describe('encodeStart / decodeStart', () => {
     expect(decoded.seed).toBe(sample.seed)
     expect(decoded.arenaWidth).toBe(sample.arenaWidth)
   })
+
+  test('truncated buffer (<22 bytes) decodes to zero-arena sentinel without throwing', () => {
+    // A malicious or buggy peer could ship a short MSG_START. The
+    // decoder must not throw RangeError; dispatch detects the
+    // arenaWidth=0 sentinel and drops the packet.
+    const tiny = new ArrayBuffer(5)
+    const decoded = decodeStart(tiny)
+    expect(decoded.arenaWidth).toBe(0)
+    expect(decoded.arenaHeight).toBe(0)
+    expect(decoded.inputRedundancyFrames).toBe(4)
+  })
 })
 
 describe('encodeInputBatch / decodeInputBatch', () => {
@@ -173,6 +184,27 @@ describe('encodeInputBatch / decodeInputBatch', () => {
     const decoded = decodeInputBatch(encodeInputBatch('green', entries))
     expect(decoded.entries.map(e => e.frameId)).toEqual([5, 10, 7])
   })
+
+  test('truncated buffer (<3 bytes) decodes to empty batch without throwing', () => {
+    expect(decodeInputBatch(new ArrayBuffer(0))).toEqual({ playerId: 'red', entries: [] })
+    expect(decodeInputBatch(new ArrayBuffer(2))).toEqual({ playerId: 'red', entries: [] })
+  })
+
+  test('inflated count byte is bounded by buffer length', () => {
+    // Hand-craft a packet that claims count=255 but only carries one
+    // entry's worth of bytes after the header. Without the bound check
+    // this would throw RangeError inside the loop.
+    const buf = new ArrayBuffer(3 + 1 * 5)
+    const v = new DataView(buf)
+    v.setUint8(0, MSG_INPUT)
+    v.setUint8(1, 0) // red
+    v.setUint8(2, 0xff) // claimed count, lies
+    v.setUint32(3, 100)
+    v.setUint8(7, 0b001)
+    const decoded = decodeInputBatch(buf)
+    expect(decoded.playerId).toBe('red')
+    expect(decoded.entries).toEqual([{ frameId: 100, bits: 0b001 }])
+  })
 })
 
 describe('encodeStateHash / decodeStateHash', () => {
@@ -188,6 +220,11 @@ describe('encodeStateHash / decodeStateHash', () => {
     // non-negative number, and the encode side guards with >>> 0.
     const buf = encodeStateHash(60, 0xffffffff >>> 0)
     expect(decodeStateHash(buf).hash).toBe(0xffffffff)
+  })
+
+  test('truncated buffer (<9 bytes) decodes to zeroes without throwing', () => {
+    expect(decodeStateHash(new ArrayBuffer(0))).toEqual({ frameId: 0, hash: 0 })
+    expect(decodeStateHash(new ArrayBuffer(5))).toEqual({ frameId: 0, hash: 0 })
   })
 })
 

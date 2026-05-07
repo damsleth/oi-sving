@@ -98,7 +98,29 @@ export function encodeStart(p: StartPacket): ArrayBuffer {
   return buf
 }
 
+export const DEFAULT_INPUT_REDUNDANCY = 4
+
+const ZERO_START: StartPacket = {
+  seed: 0,
+  arenaWidth: 0,
+  arenaHeight: 0,
+  startFrame: 0,
+  inputDelayFrames: 0,
+  stateHashIntervalFrames: 0,
+  fps: 0,
+  holeInterval: 0,
+  holeIntervalRandomness: 0,
+  initialSuperpowerCount: 0,
+  allowedPlayerMask: 0,
+  inputRedundancyFrames: DEFAULT_INPUT_REDUNDANCY,
+}
+
 export function decodeStart(msg: ArrayBuffer): StartPacket {
+  // Truncated packets are silently dropped by returning a safe-default
+  // packet. Caller can detect malformed input via `arenaWidth === 0`
+  // if needed; in practice the dispatch path ignores degenerate START
+  // packets because nothing real ticks on a zero arena.
+  if (msg.byteLength < 22) return { ...ZERO_START }
   const v = new DataView(msg)
   return {
     seed: v.getUint32(1),
@@ -114,7 +136,7 @@ export function decodeStart(msg: ArrayBuffer): StartPacket {
     allowedPlayerMask: v.getUint8(21),
     // Length-bounded read for backward compat with pre-2.0.1 hosts that
     // shipped a 22-byte packet without inputRedundancyFrames.
-    inputRedundancyFrames: msg.byteLength > 22 ? v.getUint8(22) : 4,
+    inputRedundancyFrames: msg.byteLength > 22 ? v.getUint8(22) : DEFAULT_INPUT_REDUNDANCY,
   }
 }
 
@@ -142,11 +164,21 @@ export function encodeInputBatch(playerId: string, entries: InputEntry[]): Array
 export interface InputBatch { playerId: string; entries: InputEntry[] }
 
 export function decodeInputBatch(msg: ArrayBuffer): InputBatch {
+  // Truncated header (<3 bytes) -> empty batch with sentinel playerId.
+  // Caller drops on roster ownership check anyway, but skipping the
+  // DataView read avoids a RangeError on the type byte itself.
+  if (msg.byteLength < 3) return { playerId: 'red', entries: [] }
   const v = new DataView(msg)
   const playerId = byteToPlayerId(v.getUint8(1))
   const count = v.getUint8(2)
+  // Bound the loop on actual buffer length, not the attacker-supplied
+  // count byte. A malicious peer could otherwise advertise count=255 in
+  // a short buffer and cause getUint32 / getUint8 to throw inside
+  // dispatch, which propagates as an unhandled RTCDataChannel error.
+  const expected = 3 + count * 5
+  const safeCount = msg.byteLength < expected ? Math.max(0, Math.floor((msg.byteLength - 3) / 5)) : count
   const entries: InputEntry[] = []
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < safeCount; i++) {
     entries.push({
       frameId: v.getUint32(3 + i * 5),
       bits: v.getUint8(3 + i * 5 + 4),
@@ -169,6 +201,7 @@ export function encodeStateHash(frameId: number, hash: number): ArrayBuffer {
 }
 
 export function decodeStateHash(msg: ArrayBuffer): { frameId: number; hash: number } {
+  if (msg.byteLength < 9) return { frameId: 0, hash: 0 }
   const v = new DataView(msg)
   return { frameId: v.getUint32(1), hash: v.getUint32(5) }
 }
