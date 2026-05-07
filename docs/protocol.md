@@ -13,11 +13,11 @@ Joiner ↔ server only. JSON over the same WebSocket the server uses for HTTP. T
 | host → server | `host` | `{ peerId, playerIds[] }` | Mints a 4-character room code. |
 | server → host | `hosted` | `{ code }` | Server replies with the minted code. |
 | joiner → server | `join` | `{ code, peerId, playerIds[] }` | Server validates the code. |
-| server → joiner | `joined` | `{ hostId, hostPlayerIds[] }` | Server tells the joiner who the host is. |
+| server → joiner | `joined` | `{ hostId, hostPlayerIds[], peers[] }` | Server tells the joiner who the host is and which existing joiners need direct WebRTC connections. |
 | server → host | `peer-joined` | `{ peerId, playerIds[] }` | Fired when a joiner connects. |
 | server → host | `peer-left` | `{ peerId }` | Fired when a joiner's WS closes. |
 | server → joiners | `host-gone` | `{}` | Fired when the host's WS closes. |
-| host ↔ joiner via server | `offer`, `answer`, `ice` | `{ from, to, sdp / candidate }` | Server only relays; never inspects. |
+| any peer ↔ any peer via server | `offer`, `answer`, `ice` | `{ from, to, sdp / candidate }` | Server only relays; never inspects. New joiners initiate WebRTC connections to the host and all existing joiners from `joined.peers`. |
 | any → server | `error` | `{ message }` | Bad room code, malformed message, etc. |
 
 Server module: `server/signaling-server.ts`. The same Bun process serves the static game and brokers signaling on the same port.
@@ -26,8 +26,8 @@ Server module: `server/signaling-server.ts`. The same Bun process serves the sta
 
 Peer ↔ peer, brokered by the signaling channel above. Two channels per connection:
 
-- `control`: `ordered: true`, reliable. Roster, round-start, pause, state-hash.
-- `input`: `ordered: false`, `maxRetransmits: 0`. Per-frame input bitfields. Drops are expected; redundancy windows mask them.
+- `control`: `ordered: true`, reliable. Roster, round-start, pause.
+- `input`: `ordered: false`, `maxRetransmits: 0`. Per-frame input bitfields and host-authoritative state snapshots. Drops are expected; the next packet supersedes stale state.
 
 Both channels use binary `ArrayBuffer` payloads with a 1-byte type tag at offset 0.
 
@@ -45,6 +45,7 @@ Both channels use binary `ArrayBuffer` payloads with a 1-byte type tag at offset
 | 0x08 | `MSG_ROSTER` | control | host → all | Authoritative roster snapshot (JSON) |
 | 0x09 | `MSG_CLAIM` | control | joiner → host | Joiner asks the host to claim a player id |
 | 0x0a | `MSG_RELEASE` | control | joiner → host | Joiner asks the host to release a player id |
+| 0x0b | `MSG_HOST_STATE` | input | host → all | Authoritative per-frame position/direction/scores snapshot |
 
 ### MSG_START (0x01)
 
@@ -91,12 +92,13 @@ bit 2 = SUPERPOWER
 
 Receiver side:
 
-- Joiner: every entry is written into `InputBuffer.cells`.
-- Host: same, but with an ownership check first — the sender peer must own the playerId in the host's authoritative roster, otherwise the packet is dropped silently. Without that check, any peer could overwrite somebody else's input cells.
+- Every peer applies an ownership check before writing into `InputBuffer.cells`.
+- The sender peer must own the playerId in the latest roster view, otherwise the packet is dropped silently.
+- Known peers with no claimed players are denied. Unknown peers are allowed only for the early WebRTC/roster handshake window, before a roster snapshot has named them. Without the empty-roster denial, a connected-but-unclaimed peer could overwrite somebody else's input cells.
 
 ### MSG_STATE_HASH (0x05)
 
-Sent over control by every peer at `Config.Net.stateHashIntervalFrames` (default 60). Each peer computes a 32-bit FNV-1a hash over canonical arena dims plus `(round(x*100), round(y*100), round(angle*1e6), holeCountDown, 1)` per running curve in stable lexical order.
+Legacy drift-detection gossip. In current host-authoritative multiplayer, joiners no longer simulate game truth and ignore incoming state hashes. The host still computes a local hash for diagnostics, but authoritative correction is done by `MSG_HOST_STATE`.
 
 ```
 0       u8   MSG_STATE_HASH
@@ -106,9 +108,7 @@ Sent over control by every peer at `Config.Net.stateHashIntervalFrames` (default
 
 9 bytes fixed.
 
-Comparison is **frame-aligned**: each peer caches its own hash by frameId in `localHashByFrame`, and on receive compares the remote hash for frame N against the local cached hash for frame N — never against the live current state. Recomputing on receive would diff host-state-at-N against local-state-at-(N+k), which produces false-positive divergence whenever wall clocks differ by more than ~33 ms (always, in practice, due to per-peer `Game.startDelay` drift and network RTT).
-
-If the local peer hasn't reached frame N yet, the remote claim is parked in `pendingRemoteHashes` and resolved when this peer's own gossip for frame N fires.
+Older lockstep builds compared hashes frame-aligned. That mode is intentionally not the source of truth anymore because timer drift and packet timing can make clients diverge even when input eventually arrives.
 
 ### MSG_PAUSE (0x06) / MSG_UNPAUSE (0x07)
 
@@ -148,21 +148,50 @@ Joiners can also directly call `Net.claimPlayer` and `Net.releasePlayer` from lo
 1..N    UTF-8 JSON: { playerId }
 ```
 
+### MSG_HOST_STATE (0x0b)
+
+Host-authoritative game snapshot. Sent over the unordered input channel after each host simulation frame. Joiners do not advance physics, collision, deaths, or scores locally in network games; they send local input and then apply this host snapshot as truth.
+
+```json
+{
+  "frameId": 123,
+  "isRoundStarted": true,
+  "isRunning": true,
+  "curves": [
+    {
+      "playerId": "red",
+      "alive": true,
+      "x": 100.5,
+      "y": 120.25,
+      "nextX": 101.7,
+      "nextY": 121.1,
+      "angle": 0.75,
+      "holeCountDown": 42,
+      "invisible": false
+    }
+  ],
+  "players": [
+    { "playerId": "red", "points": 3, "superpowerCount": 2 }
+  ]
+}
+```
+
+Joiners ignore stale snapshots (`frameId <= lastHostStateFrame`) and ignore `MSG_HOST_STATE` from non-host peers.
+
 ## Determinism guarantees
 
-Lockstep depends on every peer drawing identical RNG sequences in identical order. The protocol enforces this with:
+The host owns game truth. Joiners are prediction/render clients:
 
-1. **Host-broadcast seed** in MSG_START.
-2. **Sorted curve iteration** in `Game.drawFrame` and `Game.initRun` (lexical by playerId).
-3. **`resetHoleCountDown` deferred to `initRun`** so the first hole is drawn from the round seed, not the pre-seed RNG state.
-4. **Sender-side input redundancy** + **frame-ordered fallback** in `InputBuffer` so out-of-order packet arrival does not change the answer for a missing frame.
-5. **Frame-aligned hash compare** so wall-clock skew doesn't show up as drift.
+1. Joiners send delayed input bitfields.
+2. The host runs physics, collision, power-ups, deaths, and scoring.
+3. The host sends `MSG_HOST_STATE` every simulation frame.
+4. Joiners apply the newest host snapshot and never decide game outcome locally.
 
-The end-to-end determinism check is `bun run test:e2e:webrtc:long`, which drives both peers' inputs in headless Chrome for ~30 seconds and asserts zero state-hash mismatches.
+The end-to-end multiplayer smoke is `bun run test:e2e:webrtc`, which now exercises a three-peer mesh and verifies joiner-to-joiner input delivery before starting the round.
 
 ## When determinism breaks anyway
 
-The drift detection fires `'state-hash-mismatch'`. Current behavior: the event is emitted but no UI surfaces it. The plan calls for aborting the round to lobby on mismatch; that's not yet implemented.
+If host snapshots stop arriving, joiners will visually stall or keep their last authoritative state until the connection fails.
 
 Recovery options not yet implemented:
 

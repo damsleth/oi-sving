@@ -559,6 +559,11 @@ OiSving.Menu = {
             return;
         }
 
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost() && OiSving.Net.canStartRound && !OiSving.Net.canStartRound()) {
+            this.showNotEnoughPlayersError();
+            return;
+        }
+
         this.buildGameCurves();
 
         if (OiSving.Game.curves.length <= 1) {

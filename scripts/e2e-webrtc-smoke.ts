@@ -104,6 +104,7 @@ const server = Bun.spawn({
 let chrome: ReturnType<typeof Bun.spawn> | null = null
 let host: CdpPage | null = null
 let joiner: CdpPage | null = null
+let joinerB: CdpPage | null = null
 
 async function pageState(page: CdpPage | null): Promise<unknown> {
   if (!page) return null
@@ -158,8 +159,9 @@ try {
 
   host = await newPage(baseUrl)
   joiner = await newPage(baseUrl)
+  joinerB = await newPage(baseUrl)
 
-  await Promise.all([host, joiner].map(page => waitFor('OiSving bootstrap', () => page.eval<boolean>(`
+  await Promise.all([host, joiner, joinerB].map(page => waitFor('OiSving bootstrap', () => page.eval<boolean>(`
     Boolean(window.OiSving?.Net && !document.body.classList.contains('hidden'))
   `))))
 
@@ -178,21 +180,55 @@ try {
     })()
   `)
 
+  await joinerB.eval(`
+    (async () => {
+      OiSving.Menu.activatePlayer('green');
+      await OiSving.Net.join(${JSON.stringify(code)});
+      return true;
+    })()
+  `)
+
   await waitFor('host sees joiner roster', () => host!.eval<boolean>(`
     OiSving.Net.getRemotePlayerIds().includes('blue')
+    && OiSving.Net.getRemotePlayerIds().includes('green')
   `))
   await waitFor('joiner sees host roster', () => joiner!.eval<boolean>(`
     OiSving.Net.getRemotePlayerIds().includes('red')
+    && OiSving.Net.getRemotePlayerIds().includes('green')
+  `))
+  await waitFor('second joiner sees full roster', () => joinerB!.eval<boolean>(`
+    OiSving.Net.getRemotePlayerIds().includes('red')
+    && OiSving.Net.getRemotePlayerIds().includes('blue')
+  `))
+  await waitFor('joiner input reaches second joiner over the mesh', async () => {
+    await joiner!.eval(`
+      OiSving.Net.broadcastInputBatch('blue', [{ frameId: 777, bits: OiSving.Net.INPUT_LEFT }]);
+      true
+    `)
+    return joinerB!.eval<boolean>(`
+      OiSving.Net.getInputsForFrame(777, 'blue') === OiSving.Net.INPUT_LEFT
+    `)
+  })
+  await waitFor('second joiner input reaches first joiner over the mesh', async () => {
+    await joinerB!.eval(`
+      OiSving.Net.broadcastInputBatch('green', [{ frameId: 778, bits: OiSving.Net.INPUT_RIGHT }]);
+      true
+    `)
+    return joiner!.eval<boolean>(`
+      OiSving.Net.getInputsForFrame(778, 'green') === OiSving.Net.INPUT_RIGHT
+    `)
+  })
+  await waitFor('host can start after all claimed peer channels are open', () => host!.eval<boolean>(`
+    OiSving.Net.canStartRound()
   `))
 
-  await delay(1_000)
   await host.eval(`OiSving.Menu.onSpaceDown(); true`)
   await waitFor('host enters game screen', () => host!.eval<any>(`
     ({
       layerVisible: !document.getElementById('layer-game').classList.contains('hidden'),
       curves: OiSving.Game.curves.map(c => ({ id: c.getPlayer().getId(), local: c.getPlayer().isLocal }))
     })
-  `).then(state => state.layerVisible && state.curves.length === 2 ? state : false))
+  `).then(state => state.layerVisible && state.curves.length === 3 ? state : false))
   await host.eval(`OiSving.Game.onSpaceDown(); true`)
   await host.send('Page.bringToFront')
 
@@ -204,7 +240,7 @@ try {
       frame: OiSving.Game.CURRENT_FRAME_ID,
       curves: OiSving.Game.curves.map(c => ({ id: c.getPlayer().getId(), local: c.getPlayer().isLocal }))
     })
-  `).then(state => state.layerVisible && state.started && state.running && state.frame > 0 && state.curves.length === 2 ? state : false), 8_000)
+  `).then(state => state.layerVisible && state.started && state.running && state.frame > 0 && state.curves.length === 3 ? state : false), 8_000)
 
   await joiner.send('Page.bringToFront')
   const joinerState = await waitFor('joiner game starts from round-start', () => joiner!.eval<any>(`
@@ -215,9 +251,20 @@ try {
       frame: OiSving.Game.CURRENT_FRAME_ID,
       curves: OiSving.Game.curves.map(c => ({ id: c.getPlayer().getId(), local: c.getPlayer().isLocal }))
     })
-  `).then(state => state.layerVisible && state.started && state.running && state.frame > 0 && state.curves.length === 2 ? state : false), 8_000)
+  `).then(state => state.layerVisible && state.started && state.running && state.frame > 0 && state.curves.length === 3 ? state : false), 8_000)
 
-  console.log(JSON.stringify({ ok: true, code, hostState, joinerState }, null, 2))
+  await joinerB.send('Page.bringToFront')
+  const joinerBState = await waitFor('second joiner game starts from round-start', () => joinerB!.eval<any>(`
+    ({
+      layerVisible: !document.getElementById('layer-game').classList.contains('hidden'),
+      started: OiSving.Game.isRoundStarted === true,
+      running: OiSving.Game.isRunning === true || OiSving.Game.runIntervalId !== null,
+      frame: OiSving.Game.CURRENT_FRAME_ID,
+      curves: OiSving.Game.curves.map(c => ({ id: c.getPlayer().getId(), local: c.getPlayer().isLocal }))
+    })
+  `).then(state => state.layerVisible && state.started && state.running && state.frame > 0 && state.curves.length === 3 ? state : false), 8_000)
+
+  console.log(JSON.stringify({ ok: true, code, hostState, joinerState, joinerBState }, null, 2))
   await teardown(0)
 } catch (err) {
   console.error(JSON.stringify({
@@ -225,6 +272,7 @@ try {
     error: String(err),
     hostState: await pageState(host),
     joinerState: await pageState(joiner),
+    joinerBState: await pageState(joinerB),
   }, null, 2))
   await teardown(1)
 }
@@ -251,6 +299,7 @@ async function teardown(exitCode: number): Promise<void> {
   // process.exited.
   try { host?.close() } catch { /* */ }
   try { joiner?.close() } catch { /* */ }
+  try { joinerB?.close() } catch { /* */ }
   await delay(50)
   await killProcess(chrome)
   await killProcess(server as unknown as ReturnType<typeof Bun.spawn>)

@@ -45,6 +45,7 @@ import {
   MSG_ROSTER,
   MSG_CLAIM,
   MSG_RELEASE,
+  MSG_HOST_STATE,
   PLAYER_ID_TABLE,
   byteToPlayerId,
   playerIdsToMask,
@@ -92,6 +93,32 @@ export interface RosterSnapshot {
   joiners: Array<{ peerId: string; playerIds: string[] }>
 }
 
+export interface HostCurveState {
+  playerId: string
+  alive: boolean
+  x: number
+  y: number
+  nextX: number
+  nextY: number
+  angle: number
+  holeCountDown: number
+  invisible: boolean
+}
+
+export interface HostPlayerState {
+  playerId: string
+  points: number
+  superpowerCount: number
+}
+
+export interface HostStateSnapshot {
+  frameId: number
+  isRoundStarted: boolean
+  isRunning: boolean
+  curves: HostCurveState[]
+  players: HostPlayerState[]
+}
+
 type EventName = keyof NetEvents
 
 class EventBus {
@@ -125,6 +152,11 @@ interface PeerSlot {
 import { NetInputProvider } from './net-input-provider'
 import { diffRosterSnapshot } from './roster'
 import { applyHostConfig as applyHostConfigCore, type HostSimConfig } from './host-config'
+import {
+  canStartRoundFromState,
+  peerOwnsPlayerIdFromRoster,
+  type PeerChannelState,
+} from './net-guards'
 
 function applyHostConfig(cfg: HostSimConfig): void {
   applyHostConfigCore(cfg, OiSving.Config, OiSving.Game)
@@ -359,7 +391,17 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       hostHandleRelease(fromSlot.peerId, rel.playerId)
       return
     }
+    case MSG_HOST_STATE: {
+      if (isHost) return
+      if (fromSlot && fromSlot.peerId !== hostPeerIdFromJoinerView) return
+      const snap = decodeJsonMsg(msg) as HostStateSnapshot | null
+      if (snap && typeof snap === 'object') {
+        OiSving.Game?.applyHostStateSnapshot?.(snap)
+      }
+      return
+    }
     case MSG_STATE_HASH: {
+      if (!isHost) return
       // Compare host's hash for frame N against THIS peer's recorded
       // hash for frame N — not its current state. Recomputing now would
       // diff host-state-at-N against local-state-at-(N+k) where k is
@@ -468,13 +510,25 @@ function broadcastRoster(): void {
 function peerOwnsPlayerId(peerId: string, playerId: string): boolean {
   // Authoritative on the host (live roster maps); on joiners we trust
   // the host's most recent broadcast snapshot, which lives in the same
-  // maps after applyRosterSnapshot. If we have no roster info yet
-  // (early handshake), be permissive — an early rejection would create
-  // a chicken-and-egg with MSG_ROSTER preceding the first MSG_INPUT.
-  if (peerId === localPeerId) return localPlayerIds.includes(playerId)
-  const ids = remotePlayerIdsByPeer.get(peerId)
-  if (!ids || ids.length === 0) return true
-  return ids.includes(playerId)
+  // maps after applyRosterSnapshot. Known peers with no claimed players
+  // are deliberately denied — a connected-but-unclaimed peer does not
+  // get to submit input for somebody else's color.
+  return peerOwnsPlayerIdFromRoster(remotePlayerIdsByPeer, localPeerId, localPlayerIds, peerId, playerId)
+}
+
+function peerChannelStates(): Map<string, PeerChannelState> {
+  const out = new Map<string, PeerChannelState>()
+  for (const [peerId, slot] of peers) {
+    out.set(peerId, {
+      controlOpen: slot.control?.readyState === 'open',
+      inputOpen: slot.input?.readyState === 'open',
+    })
+  }
+  return out
+}
+
+function canStartAuthoritativeRound(): boolean {
+  return canStartRoundFromState(isHost, localPlayerIds, remotePlayerIdsByPeer, peerChannelStates())
 }
 
 function rosterContainsPlayerId(playerId: string): { peerId: string } | null {
@@ -709,7 +763,21 @@ OiSving.Net = {
           for (const playerId of hostPlayerIds) {
             events.emit('player-joined', { peerId: data.hostId, playerId, isLocal: false })
           }
+          const existingPeers = Array.isArray(data.peers) ? data.peers : []
+          for (const p of existingPeers) {
+            if (!p || typeof p.peerId !== 'string' || p.peerId === localPeerId) continue
+            const playerIds = normalizePlayerIds(p.playerIds)
+            remotePlayerIdsByPeer.set(p.peerId, playerIds)
+            for (const playerId of playerIds) {
+              events.emit('player-joined', { peerId: p.peerId, playerId, isLocal: false })
+            }
+          }
+
           await initiateConnection(data.hostId, ws)
+          for (const p of existingPeers) {
+            if (!p || typeof p.peerId !== 'string' || p.peerId === localPeerId) continue
+            await initiateConnection(p.peerId, ws)
+          }
           resolve()
         } else if (data.type === 'host-gone') {
           // Server explicitly tells us the host left. Distinct from a
@@ -729,6 +797,8 @@ OiSving.Net = {
         } else if (data.type === 'answer') {
           const slot = peers.get(data.from)
           if (slot) await slot.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })
+        } else if (data.type === 'offer') {
+          await handleOffer(data.from, data.sdp, ws)
         } else if (data.type === 'ice') {
           const slot = peers.get(data.from)
           if (slot && data.candidate) await slot.pc.addIceCandidate(data.candidate)
@@ -792,9 +862,7 @@ OiSving.Net = {
   // ≥2 players combined (local + remote) is required to start a round.
   // UI uses this to enable/disable the Start Game button.
   canStartRound(): boolean {
-    if (!isHost) return false
-    const total = localPlayerIds.length + [...remotePlayerIdsByPeer.values()].reduce((acc, ids) => acc + ids.length, 0)
-    return total >= 2
+    return canStartAuthoritativeRound()
   },
 
   // Fetch active rooms from the LAN signaling server. Same origin by
@@ -820,6 +888,7 @@ OiSving.Net = {
 
   startRound(seed: number, arenaWidth: number, arenaHeight: number, startFrame = 0): void {
     if (!isHost) throw new Error('startRound is host-only')
+    if (!canStartAuthoritativeRound()) throw new Error('network peers are not ready')
     setSimRng(new Rng(seed))
     OiSving.Field?.setArenaSize?.(arenaWidth, arenaHeight)
 
@@ -877,6 +946,11 @@ OiSving.Net = {
   broadcastInputBatch(playerId: string, entries: Array<{ frameId: number; bits: InputBits }>): void {
     if (entries.length === 0) return
     broadcast('input', encodeInputBatch(playerId, entries))
+  },
+
+  broadcastHostState(snapshot: HostStateSnapshot): void {
+    if (!isHost) return
+    broadcast('input', encodeJsonMsg(MSG_HOST_STATE, snapshot))
   },
 
   getInputsForFrame(frameId: number, playerId: string): InputBits {
@@ -946,6 +1020,7 @@ OiSving.Net = {
 }
 
 async function initiateConnection(remotePeerId: string, ws: WebSocket): Promise<void> {
+  if (peers.has(remotePeerId)) return
   const pc = makePeerConnection()
   const slot: PeerSlot = {
     peerId: remotePeerId,
@@ -975,6 +1050,7 @@ async function initiateConnection(remotePeerId: string, ws: WebSocket): Promise<
 }
 
 async function handleOffer(remotePeerId: string, sdp: string, ws: WebSocket): Promise<void> {
+  if (peers.has(remotePeerId)) return
   const pc = makePeerConnection()
   const slot: PeerSlot = {
     peerId: remotePeerId,

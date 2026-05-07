@@ -23,6 +23,7 @@ export const MSG_UNPAUSE = 0x07
 export const MSG_ROSTER = 0x08
 export const MSG_CLAIM = 0x09
 export const MSG_RELEASE = 0x0a
+export const MSG_HOST_STATE = 0x0b
 
 // ---------------------------------------------------------------------------
 // Player-id <-> byte conversion. PLAYER_ID_TABLE is also the canonical

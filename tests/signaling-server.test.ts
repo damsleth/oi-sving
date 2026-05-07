@@ -223,6 +223,34 @@ describe('signaling-server WebSocket protocol', () => {
     host.close()
   })
 
+  test('joined response includes existing joiners for full-mesh setup', async () => {
+    const host = await openWs()
+    host.send({ type: 'host', peerId: 'host-mesh', playerIds: ['red'] })
+    const hosted = await host.waitFor(m => m.type === 'hosted', 'hosted') as { code: string }
+
+    const joinerA = await openWs()
+    joinerA.send({ type: 'join', code: hosted.code, peerId: 'joiner-mesh-a', playerIds: ['blue'] })
+    const joinedA = await joinerA.waitFor(m => m.type === 'joined', 'joined-a') as {
+      peers?: Array<{ peerId: string; playerIds: string[] }>
+    }
+    expect(joinedA.peers).toEqual([])
+    await host.waitFor(m => m.type === 'peer-joined' && m.peerId === 'joiner-mesh-a', 'peer-joined-a')
+
+    const joinerB = await openWs()
+    joinerB.send({ type: 'join', code: hosted.code, peerId: 'joiner-mesh-b', playerIds: ['green'] })
+    const joinedB = await joinerB.waitFor(m => m.type === 'joined', 'joined-b') as {
+      peers?: Array<{ peerId: string; playerIds: string[] }>
+    }
+
+    expect(joinedB.peers).toEqual([
+      expect.objectContaining({ peerId: 'joiner-mesh-a', playerIds: ['blue'] }),
+    ])
+
+    joinerB.close()
+    joinerA.close()
+    host.close()
+  })
+
   test('host closing fans out host-gone to joiners', async () => {
     const host = await openWs()
     host.send({ type: 'host', peerId: 'host-3', playerIds: ['red'] })

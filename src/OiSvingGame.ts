@@ -48,6 +48,7 @@ OiSving.Game = {
     deathMatch:             false,
     isPaused:               false,
     isRoundStarted:         false,
+    lastHostStateFrame:     0,
     playerScoresElement:    null,
     isGameOver:             false,
     CURRENT_FRAME_ID:       0,
@@ -156,9 +157,101 @@ OiSving.Game = {
         var cfg = OiSving.Config && OiSving.Config.Net;
         var intervalFrames = (cfg && cfg.stateHashIntervalFrames) || 60;
         if (frameId === 0 || frameId % intervalFrames !== 0) return;
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) return;
         var hash = this.computeStateHash();
         if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive()) {
             OiSving.Net.reportStateHash(frameId, hash);
+        }
+    },
+
+    collectHostStateSnapshot: function(frameId) {
+        var curves = this.curves.map(function(curve) {
+            var playerId = curve.getPlayer().getId();
+            var list = OiSving.Game.runningCurves[playerId] || [];
+            return {
+                playerId: playerId,
+                alive: list.indexOf(curve) >= 0,
+                x: curve.getPositionX(),
+                y: curve.getPositionY(),
+                nextX: curve.getNextPositionX(),
+                nextY: curve.getNextPositionY(),
+                angle: curve.getOptions().angle,
+                holeCountDown: curve.getOptions().holeCountDown,
+                invisible: curve.isInvisible()
+            };
+        });
+        var players = this.players.map(function(player) {
+            return {
+                playerId: player.getId(),
+                points: player.getPoints(),
+                superpowerCount: player.getSuperpower().getCount()
+            };
+        });
+        return {
+            frameId: frameId,
+            isRoundStarted: this.isRoundStarted,
+            isRunning: this.isRunning,
+            curves: curves,
+            players: players
+        };
+    },
+
+    applyHostStateSnapshot: function(snapshot) {
+        if (!snapshot || snapshot.frameId <= this.lastHostStateFrame) return;
+        this.lastHostStateFrame = snapshot.frameId;
+        this.CURRENT_FRAME_ID = snapshot.frameId;
+
+        if (Array.isArray(snapshot.players)) {
+            snapshot.players.forEach(function(pState) {
+                var player = OiSving.getPlayer(pState.playerId);
+                if (!player) return;
+                if (player.setPoints) player.setPoints(pState.points || 0);
+                if (player.getSuperpower && player.getSuperpower().setCount) {
+                    player.getSuperpower().setCount(pState.superpowerCount || 0);
+                }
+            });
+            this.renderPlayerScores();
+        }
+
+        if (Array.isArray(snapshot.curves)) {
+            snapshot.curves.forEach(function(cState) {
+                var curve = null;
+                for (var i = 0; i < OiSving.Game.curves.length; i++) {
+                    if (OiSving.Game.curves[i].getPlayer().getId() === cState.playerId) {
+                        curve = OiSving.Game.curves[i];
+                        break;
+                    }
+                }
+                if (!curve) return;
+
+                if (cState.alive) {
+                    if (!OiSving.Game.runningCurves[cState.playerId]) {
+                        OiSving.Game.runningCurves[cState.playerId] = [curve];
+                    }
+                    var drawLine = OiSving.Game.isRoundStarted && snapshot.isRoundStarted;
+                    curve.setPositionX(cState.x);
+                    curve.setPositionY(cState.y);
+                    curve.setNextPositionX(cState.nextX);
+                    curve.setNextPositionY(cState.nextY);
+                    curve.setAngle(cState.angle);
+                    curve.getOptions().holeCountDown = cState.holeCountDown;
+                    curve.setIsInvisible(!!cState.invisible);
+                    if (drawLine) {
+                        if (cState.invisible) {
+                            OiSving.Field.drawLine('powerUp', cState.x, cState.y, cState.nextX, cState.nextY, '', curve);
+                        } else {
+                            OiSving.Field.drawLine('curve', cState.x, cState.y, cState.nextX, cState.nextY, curve.getPlayer().getColor(), curve);
+                        }
+                    }
+                } else {
+                    delete OiSving.Game.runningCurves[cState.playerId];
+                }
+            });
+        }
+
+        this.isRoundStarted = !!snapshot.isRoundStarted;
+        if (!snapshot.isRunning && this.isRunning) {
+            this.stopRun();
         }
     },
 
@@ -201,6 +294,13 @@ OiSving.Game = {
         // the keyboard provider treats submit as a no-op.
         this.sampleAndSubmitLocalInputs(this.CURRENT_FRAME_ID);
 
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) {
+            if (OiSving.Net.pruneInputs) {
+                OiSving.Net.pruneInputs(this.CURRENT_FRAME_ID - this.fps);
+            }
+            return;
+        }
+
         // Iterate in stable lexical order. drawNextFrame draws from the
         // global seeded RNG (hole interval reset, superpower hooks), so
         // every peer must visit curves in the same order to stay in
@@ -216,6 +316,9 @@ OiSving.Game = {
 
         // Lockstep step 2: drift detection + bounded buffer pruning.
         this.maybeGossipStateHash(this.CURRENT_FRAME_ID);
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost() && OiSving.Net.broadcastHostState) {
+            OiSving.Net.broadcastHostState(this.collectHostStateSnapshot(this.CURRENT_FRAME_ID));
+        }
         if (OiSving.Net && OiSving.Net.pruneInputs) {
             // Keep one second of input history. Past that the deterministic
             // "last-known bits" fallback in the buffer is enough.
@@ -393,6 +496,7 @@ OiSving.Game = {
     startNewRound: function() {
         this.isRoundStarted = true;
         this.CURRENT_FRAME_ID = 0;
+        this.lastHostStateFrame = 0;
 
         if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost()) {
             OiSving.Net.startRound(

@@ -245,11 +245,22 @@ const server = Bun.serve<WsData>({
           const playerIds = normalizePlayerIds(msg.playerIds)
           const address = ws.data.address ?? null
           const hostname = ws.data.hostname ?? null
+          const existingJoiners = [...room.joiners.values()].map(j => ({
+            peerId: j.peerId,
+            playerIds: j.playerIds,
+            address: j.address,
+            hostname: j.hostname,
+          }))
           room.joiners.set(peerId, { peerId, ws, playerIds, address, hostname })
           room.lastActivityAt = Date.now()
           ws.data.peerId = peerId
           ws.data.code = code
-          send(ws, { type: 'joined', hostId: room.host.peerId, hostPlayerIds: room.host.playerIds })
+          send(ws, {
+            type: 'joined',
+            hostId: room.host.peerId,
+            hostPlayerIds: room.host.playerIds,
+            peers: existingJoiners,
+          })
           send(room.host.ws, { type: 'peer-joined', peerId, playerIds, address, hostname })
           return
         }

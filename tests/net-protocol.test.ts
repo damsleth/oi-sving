@@ -13,6 +13,7 @@ import {
   MSG_ROSTER,
   MSG_CLAIM,
   MSG_RELEASE,
+  MSG_HOST_STATE,
   PLAYER_ID_TABLE,
   playerIdToByte,
   byteToPlayerId,
@@ -224,6 +225,20 @@ describe('encodeJsonMsg / decodeJsonMsg', () => {
     const buf = encodeJsonMsg(MSG_RELEASE, { playerId: 'green' })
     expect(new DataView(buf).getUint8(0)).toBe(MSG_RELEASE)
     expect(decodeJsonMsg(buf)).toEqual({ playerId: 'green' })
+  })
+
+  test('round-trips a host-authoritative state payload', () => {
+    const payload = {
+      frameId: 12,
+      isRoundStarted: true,
+      isRunning: true,
+      curves: [
+        { playerId: 'red', alive: true, x: 10, y: 11, nextX: 12, nextY: 13, angle: 0.5, holeCountDown: 99 },
+      ],
+    }
+    const buf = encodeJsonMsg(MSG_HOST_STATE, payload)
+    expect(new DataView(buf).getUint8(0)).toBe(MSG_HOST_STATE)
+    expect(decodeJsonMsg(buf)).toEqual(payload)
   })
 
   test('returns null on a payload that is not valid JSON', () => {

@@ -58,6 +58,7 @@ OiSving.Superpower = function(hooks, act, helpers, type, init, close, audioPlaye
     this.getCount = function() { return count; };
     this.isActive = function() { return isActive; };
 
+    this.setCount = function(newCount) { count = Math.max(0, Math.min(newCount, OiSving.Config.Superpower.maxSuperpowers)); };
     this.setIsActive = function(newIsActive) { isActive = newIsActive; };
 
 };
