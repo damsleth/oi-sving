@@ -160,6 +160,7 @@ import {
   type PeerChannelState,
 } from './net-guards'
 import { decideClaim, decideRelease } from './host-roster-validator'
+import { StateHashCompare } from './state-hash-compare'
 
 function applyHostConfig(cfg: HostSimConfig): void {
   applyHostConfigCore(cfg, OiSving.Config, OiSving.Game)
@@ -169,13 +170,11 @@ const broadcastInputViaNet = (playerId: string, ring: Array<{ frameId: number; b
   OiSving.Net?.broadcastInputBatch(playerId, ring)
 }
 
-// Per-peer cache of locally-computed state-hash gossip values, keyed by
-// the simulation frameId at which we hashed. Used to do frame-aligned
-// drift detection regardless of when peers' wall clocks tick. Pending
-// remote hashes that arrive before local catches up sit here too.
-const localHashByFrame = new Map<number, number>()
-const pendingRemoteHashes = new Map<number, number>()
+// Frame-aligned drift detection. Extracted into StateHashCompare so the
+// comparison logic can be unit-tested without booting WebRTC; see
+// src/state-hash-compare.ts for the why behind the two-map design.
 const HASH_CACHE_RETAIN_FRAMES = 600 // ~10s at 60 fps
+let hashCompare = new StateHashCompare(HASH_CACHE_RETAIN_FRAMES)
 
 // Module-level mutable state. The singleton matches the existing OiSving
 // module shape; tests inject via OiSving.Net.__setMockSocket.
@@ -403,23 +402,16 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       // diff host-state-at-N against local-state-at-(N+k) where k is
       // the wall-clock skew (network RTT + per-peer start-delay drift).
       // That's a guaranteed false positive even when the simulation is
-      // perfectly deterministic. Each peer caches its own gossip hash
-      // in localHashByFrame so this comparison is always frame-aligned.
+      // perfectly deterministic. StateHashCompare manages the
+      // local/pending-remote split so this comparison is always
+      // frame-aligned regardless of arrival order.
       // decodeStateHash returns zeros on a truncated buffer, which is
-      // harmless: we only emit a mismatch when localHashByFrame has an
-      // entry for that frame, and frame 0 won't exist in our cache.
+      // harmless: we only emit a mismatch when our own hash for that
+      // frame has been recorded, and frame 0 won't exist there.
       if (msg.byteLength < 9) return
       const { frameId, hash: remoteHash } = decodeStateHash(msg)
-      const myHashAtFrame = localHashByFrame.get(frameId)
-      if (typeof myHashAtFrame === 'number') {
-        if (myHashAtFrame !== remoteHash) {
-          events.emit('state-hash-mismatch', frameId, remoteHash, myHashAtFrame)
-        }
-      } else {
-        // Local peer is behind; remember the remote claim and compare
-        // when our own gossip for that frame fires.
-        pendingRemoteHashes.set(frameId, remoteHash)
-      }
+      const event = hashCompare.reportRemote(frameId, remoteHash)
+      if (event) events.emit('state-hash-mismatch', event.frameId, event.expected, event.actual)
       return
     }
     default:
@@ -853,8 +845,7 @@ OiSving.Net = {
     hostPeerIdFromJoinerView = null
     inputBuffer = new InputBuffer()
     netProvider = null
-    localHashByFrame.clear()
-    pendingRemoteHashes.clear()
+    hashCompare.clear()
     setConnState('idle')
   },
 
@@ -963,21 +954,10 @@ OiSving.Net = {
   reportStateHash(frameId: number, hash: number): void {
     // Cache locally so MSG_STATE_HASH dispatch can do frame-aligned
     // comparison instead of recomputing current state at receive time.
-    // Resolve any pending remote hash for the same frame now that we
-    // have a value to compare against.
-    localHashByFrame.set(frameId, hash)
-    const cutoff = frameId - HASH_CACHE_RETAIN_FRAMES
-    for (const f of localHashByFrame.keys()) {
-      if (f < cutoff) localHashByFrame.delete(f)
-    }
-    const pending = pendingRemoteHashes.get(frameId)
-    if (typeof pending === 'number') {
-      pendingRemoteHashes.delete(frameId)
-      if (pending !== hash) events.emit('state-hash-mismatch', frameId, pending, hash)
-    }
-    for (const f of pendingRemoteHashes.keys()) {
-      if (f < cutoff) pendingRemoteHashes.delete(f)
-    }
+    // StateHashCompare resolves any pending remote hash for the same
+    // frame now that we have a value to compare against.
+    const event = hashCompare.reportLocal(frameId, hash)
+    if (event) events.emit('state-hash-mismatch', event.frameId, event.expected, event.actual)
     broadcast('control', encodeStateHash(frameId, hash))
   },
 
