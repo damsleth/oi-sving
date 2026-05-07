@@ -13,12 +13,14 @@ Joiner ↔ server only. JSON over the same WebSocket the server uses for HTTP. T
 | host → server | `host` | `{ peerId, playerIds[] }` | Mints a 4-character room code. |
 | server → host | `hosted` | `{ code }` | Server replies with the minted code. |
 | joiner → server | `join` | `{ code, peerId, playerIds[] }` | Server validates the code. |
-| server → joiner | `joined` | `{ hostId, hostPlayerIds[], peers[] }` | Server tells the joiner who the host is and which existing joiners need direct WebRTC connections. |
-| server → host | `peer-joined` | `{ peerId, playerIds[] }` | Fired when a joiner connects. |
+| server → joiner | `joined` | `{ hostId, hostPlayerIds[], peers: [{ peerId, playerIds[], address, hostname }] }` | Server tells the joiner who the host is and which existing joiners need direct WebRTC connections. `address` is the peer's IP (string or null); `hostname` is best-effort reverse DNS (often null on LAN). |
+| server → host | `peer-joined` | `{ peerId, playerIds[], address, hostname }` | Fired when a joiner connects. `address` and `hostname` populate the host's "who joined" UI. `hostname` may be null if reverse DNS hasn't landed yet (resolved off the upgrade path with a 500ms timeout). |
 | server → host | `peer-left` | `{ peerId }` | Fired when a joiner's WS closes. |
 | server → joiners | `host-gone` | `{}` | Fired when the host's WS closes. |
 | any peer ↔ any peer via server | `offer`, `answer`, `ice` | `{ from, to, sdp / candidate }` | Server only relays; never inspects. New joiners initiate WebRTC connections to the host and all existing joiners from `joined.peers`. |
 | any → server | `error` | `{ message }` | Bad room code, malformed message, etc. |
+
+The server assumes a trusted network. There is no per-IP rate limit, no max rooms cap, and no max joiners-per-room cap. The `joined.peers[]` payload includes joiner IPs and hostnames, which is fine for LAN play but makes the room a passive IP-discovery vector if exposed to the public internet.
 
 Server module: `server/signaling-server.ts`. The same Bun process serves the static game and brokers signaling on the same port.
 
@@ -39,7 +41,7 @@ Both channels use binary `ArrayBuffer` payloads with a 1-byte type tag at offset
 | 0x02 | `MSG_INPUT` | input | any → all | Per-player input bitfield, redundancy window |
 | 0x03 | reserved (`MSG_PING`) | — | — | Reserved for future RTT measurement |
 | 0x04 | `MSG_LEAVE` | control | any → all | Reserved; peer-left handled via signaling |
-| 0x05 | `MSG_STATE_HASH` | control | any → all | Drift-detection gossip every N frames |
+| 0x05 | `MSG_STATE_HASH` | control | host → host (diagnostic) | Drift-detection gossip every N frames; joiners drop incoming hashes |
 | 0x06 | `MSG_PAUSE` | control | host → all | Authoritative pause signal |
 | 0x07 | `MSG_UNPAUSE` | control | host → all | Authoritative resume signal |
 | 0x08 | `MSG_ROSTER` | control | host → all | Authoritative roster snapshot (JSON) |
@@ -177,6 +179,8 @@ Host-authoritative game snapshot. Sent over the unordered input channel after ea
 ```
 
 Joiners ignore stale snapshots (`frameId <= lastHostStateFrame`) and ignore `MSG_HOST_STATE` from non-host peers.
+
+`invisible` is set by the host when an Invisibility superpower is active for that curve; absence on the wire reads as `false`. `nextX` / `nextY` are the projected position one tick ahead, used by joiner-side interpolation. `holeCountDown` is the remaining frames until the curve next punches a hole in its trail.
 
 ## Determinism guarantees
 
