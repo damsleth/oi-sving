@@ -138,6 +138,30 @@ function staticPath(url: URL): string | null {
   return `${STATIC_ROOT}/${normalized.join('/')}`
 }
 
+// Reverse DNS is best-effort and runs off the upgrade path. node:dns
+// reverse() has no default timeout, so awaiting it inside fetch()
+// blocked every WS upgrade behind a slow recursive resolver. We cap
+// the lookup at REVERSE_DNS_TIMEOUT_MS and store the result on
+// ws.data when (and only if) it lands before the lookup is abandoned.
+const REVERSE_DNS_TIMEOUT_MS = 500
+
+function resolveHostnameOffPath(ws: ServerWebSocket): void {
+  const address = ws.data.address
+  if (!address) return
+  let settled = false
+  const timer = setTimeout(() => { settled = true }, REVERSE_DNS_TIMEOUT_MS)
+  dns.reverse(address).then(names => {
+    clearTimeout(timer)
+    if (settled) return
+    settled = true
+    const hostname = names[0] ?? null
+    if (hostname) ws.data.hostname = hostname
+  }).catch(() => {
+    clearTimeout(timer)
+    settled = true
+  })
+}
+
 const server = Bun.serve<WsData>({
   port: PORT,
   hostname: BIND_HOST,
@@ -146,21 +170,12 @@ const server = Bun.serve<WsData>({
     if (req.headers.get('upgrade') === 'websocket') {
       // Capture the peer's IP at upgrade time so the host can show
       // who joined even before colors are claimed. Reverse DNS is
-      // best-effort and fails silently — most LAN clients won't
-      // have a PTR record, mDNS / Bonjour names depend on the host
-      // OS resolver.
+      // resolved async in the `open` handler below; ws.data.hostname
+      // stays null until (or unless) the lookup lands within the
+      // timeout window.
       const ipInfo = srv.requestIP(req)
       const address = ipInfo?.address ?? null
-      let hostname: string | null = null
-      if (address) {
-        try {
-          const names = await dns.reverse(address)
-          hostname = names[0] ?? null
-        } catch {
-          hostname = null
-        }
-      }
-      if (srv.upgrade(req, { data: { address, hostname } })) return undefined
+      if (srv.upgrade(req, { data: { address, hostname: null } })) return undefined
       return new Response('websocket upgrade failed\n', { status: 400 })
     }
     if (url.pathname === '/health') {
@@ -200,8 +215,13 @@ const server = Bun.serve<WsData>({
     })
   },
   websocket: {
-    open(_ws) {
-      // No-op until the client identifies itself with a host/join message.
+    open(ws) {
+      // Kick off best-effort reverse DNS off the upgrade path. The
+      // host/join message handler reads ws.data.hostname at room-
+      // member registration time; if DNS hasn't landed yet, hostname
+      // stays null and the host UI shows just the address. Acceptable
+      // because the feature is cosmetic.
+      resolveHostnameOffPath(ws)
     },
     message(ws, raw) {
       let msg: Record<string, unknown>
