@@ -451,7 +451,16 @@ function attachDataChannel(slot: PeerSlot, ch: RTCDataChannel, label: 'control' 
   })
   ch.addEventListener('message', evt => {
     if (typeof evt.data === 'string') return
-    dispatch(evt.data as ArrayBuffer, slot)
+    // Drop malformed packets quietly. Decoders bail on truncated buffers
+    // (returning safe defaults), but defense-in-depth: any uncaught
+    // throw in dispatch otherwise propagates as an unhandled exception
+    // out of the RTCDataChannel listener and clutters the console with
+    // every malformed packet a peer sends. One quiet drop is preferable.
+    try {
+      dispatch(evt.data as ArrayBuffer, slot)
+    } catch {
+      // Intentionally swallowed.
+    }
   })
 }
 
