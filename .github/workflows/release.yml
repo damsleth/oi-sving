@@ -41,14 +41,12 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      # Generate dist/ + server/embedded-assets.ts before tests because the
-      # signaling-server integration test spawns a child that imports the
-      # embedded-asset manifest, which fails if dist/ doesn't exist yet.
-      - name: Build browser assets
-        run: bun run build
-
+      # 'bun run test' fires the pretest hook (bun run build), guaranteeing
+      # dist/ exists before the signaling-server integration test spawns a
+      # child that imports server/embedded-assets.ts. 'bun test' (no `run`)
+      # would skip the hook and fail on missing dist/ imports.
       - name: Test
-        run: bun test
+        run: bun run test
 
       - name: Cross-compile standalone binaries
         run: bun run build:signaling:all

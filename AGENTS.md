@@ -28,10 +28,14 @@ If the workflow fails, fix it and either re-tag (force-update) or cut a patch ve
 The standard gate before any non-trivial commit:
 
 ```sh
-bun run typecheck
-bun test
-bun run build
+bun run dist  # clean + typecheck + build + test, in that order
 ```
+
+`bun run dist` is the canonical local equivalent of CI. The order matters:
+build runs before test because the signaling-server integration test
+spawns a child that imports `server/embedded-assets.ts`, which depends on
+`dist/`. Running `bun test` directly skips the `pretest` hook - use
+`bun run test` if you want the hook to fire and rebuild `dist/` first.
 
 For changes that touch the multiplayer surface (`src/net.ts`, `src/input-buffer.ts`, `src/OiSvingGame.ts`, `src/OiSvingMenu.ts`, `server/signaling-server.ts`):
 
