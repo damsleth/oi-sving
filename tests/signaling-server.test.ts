@@ -26,7 +26,7 @@ let staticRoot: string | null = null
 
 async function waitReady(): Promise<void> {
   const started = Date.now()
-  while (Date.now() - started < 5000) {
+  while (Date.now() - started < 10000) {
     try {
       const res = await fetch(`${baseUrl}/health`)
       if (res.ok) return
@@ -36,6 +36,8 @@ async function waitReady(): Promise<void> {
   throw new Error(`signaling-server did not come up on ${port}`)
 }
 
+// CI runners take >5s to spawn the Bun child + serve; default hook
+// timeout is 5s. Give the spawn/teardown headroom.
 beforeAll(async () => {
   // Use a sandboxed static root so the static-fallback test has a
   // predictable file to fetch and isn't sensitive to repo state.
@@ -56,13 +58,13 @@ beforeAll(async () => {
     stderr: 'ignore',
   })
   await waitReady()
-})
+}, 15000)
 
 afterAll(async () => {
   try { server?.kill() } catch { /* */ }
   await server?.exited.catch(() => {})
   if (staticRoot) await rm(staticRoot, { recursive: true, force: true }).catch(() => {})
-})
+}, 15000)
 
 interface WsRpc {
   ws: WebSocket
