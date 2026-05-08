@@ -41,11 +41,17 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # Generate dist/ + server/embedded-assets.ts before tests because the
+      # signaling-server integration test spawns a child that imports the
+      # embedded-asset manifest, which fails if dist/ doesn't exist yet.
+      - name: Build browser assets
+        run: bun run build
+
       - name: Test
         run: bun test
 
-      - name: Build browser assets and cross-compile binaries
-        run: bun run build:release
+      - name: Cross-compile standalone binaries
+        run: bun run build:signaling:all
 
       - name: Package archives
         id: package
