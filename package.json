@@ -29,9 +29,10 @@
     "typecheck": "bun x tsc --noEmit",
     "pretest": "bun run build",
     "test": "bun test",
-    "watch:js": "bun build src/main.ts --outfile=dist/js/oisving.min.js --target=browser --sourcemap=linked --watch",
+    "watch:js": "bun build src/main.ts --outfile=dist/js/oisving.min.js --target=browser --sourcemap=linked --define __DEV__=false --watch",
     "watch:css": "bun x sass scss/main.scss dist/css/main.css --watch --no-source-map --quiet-deps",
-    "serve": "bun run server/signaling-server.ts"
+    "serve": "bun run server/signaling-server.ts",
+    "dev:watch": "bun run scripts/dev.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",

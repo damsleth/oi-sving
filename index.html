@@ -2,6 +2,13 @@
 <html prefix="og: http://ogp.me/ns#">
     <head>
         <meta charset='utf-8' />
+        <meta name='viewport' content='width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no' />
+        <meta name='theme-color' content='#222222' />
+        <meta name='apple-mobile-web-app-capable' content='yes' />
+        <meta name='mobile-web-app-capable' content='yes' />
+        <meta name='apple-mobile-web-app-status-bar-style' content='black-translucent' />
+        <meta name='apple-mobile-web-app-title' content='Oi, Sving!' />
+        <meta name='format-detection' content='telephone=no' />
         <meta name='description' content='Oi, Sving! - an open source HTML5 multiplayer take on Achtung, die Kurve!' />
         <meta name='keywords' content='Oi Sving, Achtung Kurve, Zatacka, Curve Fever, Open Source, Browser Game, Online, HTML5, JavaScript, Multiplayer' />
         <meta name='author' content='@damsleth - https://github.com/damsleth/oi-sving' />
@@ -21,6 +28,9 @@
                 
         <link rel='stylesheet' type='text/css' href='dist/css/main.css' />
         <link rel='icon' type='image/ico' href='dist/images/favicon.ico'>
+        <link rel='icon' type='image/svg+xml' href='dist/images/icon.svg'>
+        <link rel='apple-touch-icon' href='dist/images/og.png'>
+        <link rel='manifest' href='/manifest.webmanifest'>
     </head>
     <body id='app' class='hidden'>
         <div id='content'>
@@ -94,6 +104,18 @@
                 <div id='content-left'>
                     <canvas id='field'></canvas>
                     <div id='dark-knight' class='hidden'></div>
+                    <div id='touch-overlay' class='hidden'>
+                        <div id='touch-buttons'>
+                            <div id='touch-btn-left' class='touch-btn'>&#10094;</div>
+                            <div id='touch-btn-super' class='touch-btn touch-btn-super'>&#9889;</div>
+                            <div id='touch-btn-right' class='touch-btn'>&#10095;</div>
+                        </div>
+                        <div id='touch-relative'>
+                            <div id='touch-relative-origin'></div>
+                            <div id='touch-relative-super' class='touch-btn'>&#9889;</div>
+                        </div>
+                        <div id='touch-mode-toggle' class='button' onclick='OiSving.TouchControls.toggleMode(); return false;'>switch controls</div>
+                    </div>
                 </div>
 
                 <div id='content-right' class='light'>
@@ -120,6 +142,11 @@
         </div>
 
         <div id='net-toasts'></div>
+
+        <div id='focus-indicator' class='hidden'>
+            <span class='focus-indicator-dot'></span>
+            <span class='focus-indicator-body'></span>
+        </div>
 
         <div id='lightbox-overlay' class='hidden'>
             <div id='lightbox-wrap'>

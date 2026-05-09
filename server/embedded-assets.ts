@@ -4,78 +4,82 @@
 // that uniformly across asset types, hence the nocheck.
 
 import a0 from '../index.html' with { type: 'file' }
-import a1 from '../dist/css/main.css' with { type: 'file' }
-import a2 from '../dist/images/favicon.ico' with { type: 'file' }
-import a3 from '../dist/images/og.png' with { type: 'file' }
-import a4 from '../dist/images/screenshot_1.png' with { type: 'file' }
-import a5 from '../dist/images/screenshot_3.png' with { type: 'file' }
-import a6 from '../dist/images/screenshot_2.png' with { type: 'file' }
-import a7 from '../dist/js/oisving.min.js' with { type: 'file' }
-import a8 from '../dist/sound/game-pause-in.mp3' with { type: 'file' }
-import a9 from '../dist/sound/superpower/vertical-bar.mp3' with { type: 'file' }
-import a10 from '../dist/sound/superpower/run-slower.mp3' with { type: 'file' }
-import a11 from '../dist/sound/superpower/hydra.mp3' with { type: 'file' }
-import a12 from '../dist/sound/superpower/shoot-holes.mp3' with { type: 'file' }
-import a13 from '../dist/sound/superpower/reverse.mp3' with { type: 'file' }
-import a14 from '../dist/sound/superpower/run-faster.mp3' with { type: 'file' }
-import a15 from '../dist/sound/superpower/dark-knight.mp3' with { type: 'file' }
-import a16 from '../dist/sound/superpower/cross-walls.mp3' with { type: 'file' }
-import a17 from '../dist/sound/superpower/invisible-end.mp3' with { type: 'file' }
-import a18 from '../dist/sound/superpower/square-head.mp3' with { type: 'file' }
-import a19 from '../dist/sound/superpower/jump.mp3' with { type: 'file' }
-import a20 from '../dist/sound/superpower/invisible-start.mp3' with { type: 'file' }
-import a21 from '../dist/sound/game-start-in.mp3' with { type: 'file' }
-import a22 from '../dist/sound/game-victory.mp3' with { type: 'file' }
-import a23 from '../dist/sound/curve-crashed.mp3' with { type: 'file' }
-import a24 from '../dist/sound/game-deathmatch.mp3' with { type: 'file' }
-import a25 from '../dist/sound/menu-error.mp3' with { type: 'file' }
-import a26 from '../dist/sound/game-music-stem-1.mp3' with { type: 'file' }
-import a27 from '../dist/sound/game-pause-out.mp3' with { type: 'file' }
-import a28 from '../dist/sound/game-music-stem-3.mp3' with { type: 'file' }
-import a29 from '../dist/sound/game-music-stem-2.mp3' with { type: 'file' }
-import a30 from '../dist/sound/menu-navigate.mp3' with { type: 'file' }
-import a31 from '../dist/sound/game-start-out.mp3' with { type: 'file' }
-import a32 from '../dist/sound/game-end.mp3' with { type: 'file' }
-import a33 from '../dist/sound/menu-music.mp3' with { type: 'file' }
-import a34 from '../dist/sound/game-music-stem-4.mp3' with { type: 'file' }
-import a35 from '../dist/sound/game-power-up.mp3' with { type: 'file' }
+import a1 from '../manifest.webmanifest' with { type: 'file' }
+import a2 from '../dist/css/main.css' with { type: 'file' }
+import a3 from '../dist/images/favicon.ico' with { type: 'file' }
+import a4 from '../dist/images/icon.svg' with { type: 'file' }
+import a5 from '../dist/images/og.png' with { type: 'file' }
+import a6 from '../dist/images/screenshot_1.png' with { type: 'file' }
+import a7 from '../dist/images/screenshot_3.png' with { type: 'file' }
+import a8 from '../dist/images/screenshot_2.png' with { type: 'file' }
+import a9 from '../dist/js/oisving.min.js' with { type: 'file' }
+import a10 from '../dist/sound/game-pause-in.mp3' with { type: 'file' }
+import a11 from '../dist/sound/superpower/vertical-bar.mp3' with { type: 'file' }
+import a12 from '../dist/sound/superpower/run-slower.mp3' with { type: 'file' }
+import a13 from '../dist/sound/superpower/hydra.mp3' with { type: 'file' }
+import a14 from '../dist/sound/superpower/shoot-holes.mp3' with { type: 'file' }
+import a15 from '../dist/sound/superpower/reverse.mp3' with { type: 'file' }
+import a16 from '../dist/sound/superpower/run-faster.mp3' with { type: 'file' }
+import a17 from '../dist/sound/superpower/dark-knight.mp3' with { type: 'file' }
+import a18 from '../dist/sound/superpower/cross-walls.mp3' with { type: 'file' }
+import a19 from '../dist/sound/superpower/invisible-end.mp3' with { type: 'file' }
+import a20 from '../dist/sound/superpower/square-head.mp3' with { type: 'file' }
+import a21 from '../dist/sound/superpower/jump.mp3' with { type: 'file' }
+import a22 from '../dist/sound/superpower/invisible-start.mp3' with { type: 'file' }
+import a23 from '../dist/sound/game-start-in.mp3' with { type: 'file' }
+import a24 from '../dist/sound/game-victory.mp3' with { type: 'file' }
+import a25 from '../dist/sound/curve-crashed.mp3' with { type: 'file' }
+import a26 from '../dist/sound/game-deathmatch.mp3' with { type: 'file' }
+import a27 from '../dist/sound/menu-error.mp3' with { type: 'file' }
+import a28 from '../dist/sound/game-music-stem-1.mp3' with { type: 'file' }
+import a29 from '../dist/sound/game-pause-out.mp3' with { type: 'file' }
+import a30 from '../dist/sound/game-music-stem-3.mp3' with { type: 'file' }
+import a31 from '../dist/sound/game-music-stem-2.mp3' with { type: 'file' }
+import a32 from '../dist/sound/menu-navigate.mp3' with { type: 'file' }
+import a33 from '../dist/sound/game-start-out.mp3' with { type: 'file' }
+import a34 from '../dist/sound/game-end.mp3' with { type: 'file' }
+import a35 from '../dist/sound/menu-music.mp3' with { type: 'file' }
+import a36 from '../dist/sound/game-music-stem-4.mp3' with { type: 'file' }
+import a37 from '../dist/sound/game-power-up.mp3' with { type: 'file' }
 
 export const embeddedAssets: Record<string, string> = {
   "/index.html": a0,
   "/": a0,
-  "/dist/css/main.css": a1,
-  "/dist/images/favicon.ico": a2,
-  "/dist/images/og.png": a3,
-  "/dist/images/screenshot_1.png": a4,
-  "/dist/images/screenshot_3.png": a5,
-  "/dist/images/screenshot_2.png": a6,
-  "/dist/js/oisving.min.js": a7,
-  "/dist/sound/game-pause-in.mp3": a8,
-  "/dist/sound/superpower/vertical-bar.mp3": a9,
-  "/dist/sound/superpower/run-slower.mp3": a10,
-  "/dist/sound/superpower/hydra.mp3": a11,
-  "/dist/sound/superpower/shoot-holes.mp3": a12,
-  "/dist/sound/superpower/reverse.mp3": a13,
-  "/dist/sound/superpower/run-faster.mp3": a14,
-  "/dist/sound/superpower/dark-knight.mp3": a15,
-  "/dist/sound/superpower/cross-walls.mp3": a16,
-  "/dist/sound/superpower/invisible-end.mp3": a17,
-  "/dist/sound/superpower/square-head.mp3": a18,
-  "/dist/sound/superpower/jump.mp3": a19,
-  "/dist/sound/superpower/invisible-start.mp3": a20,
-  "/dist/sound/game-start-in.mp3": a21,
-  "/dist/sound/game-victory.mp3": a22,
-  "/dist/sound/curve-crashed.mp3": a23,
-  "/dist/sound/game-deathmatch.mp3": a24,
-  "/dist/sound/menu-error.mp3": a25,
-  "/dist/sound/game-music-stem-1.mp3": a26,
-  "/dist/sound/game-pause-out.mp3": a27,
-  "/dist/sound/game-music-stem-3.mp3": a28,
-  "/dist/sound/game-music-stem-2.mp3": a29,
-  "/dist/sound/menu-navigate.mp3": a30,
-  "/dist/sound/game-start-out.mp3": a31,
-  "/dist/sound/game-end.mp3": a32,
-  "/dist/sound/menu-music.mp3": a33,
-  "/dist/sound/game-music-stem-4.mp3": a34,
-  "/dist/sound/game-power-up.mp3": a35,
+  "/manifest.webmanifest": a1,
+  "/dist/css/main.css": a2,
+  "/dist/images/favicon.ico": a3,
+  "/dist/images/icon.svg": a4,
+  "/dist/images/og.png": a5,
+  "/dist/images/screenshot_1.png": a6,
+  "/dist/images/screenshot_3.png": a7,
+  "/dist/images/screenshot_2.png": a8,
+  "/dist/js/oisving.min.js": a9,
+  "/dist/sound/game-pause-in.mp3": a10,
+  "/dist/sound/superpower/vertical-bar.mp3": a11,
+  "/dist/sound/superpower/run-slower.mp3": a12,
+  "/dist/sound/superpower/hydra.mp3": a13,
+  "/dist/sound/superpower/shoot-holes.mp3": a14,
+  "/dist/sound/superpower/reverse.mp3": a15,
+  "/dist/sound/superpower/run-faster.mp3": a16,
+  "/dist/sound/superpower/dark-knight.mp3": a17,
+  "/dist/sound/superpower/cross-walls.mp3": a18,
+  "/dist/sound/superpower/invisible-end.mp3": a19,
+  "/dist/sound/superpower/square-head.mp3": a20,
+  "/dist/sound/superpower/jump.mp3": a21,
+  "/dist/sound/superpower/invisible-start.mp3": a22,
+  "/dist/sound/game-start-in.mp3": a23,
+  "/dist/sound/game-victory.mp3": a24,
+  "/dist/sound/curve-crashed.mp3": a25,
+  "/dist/sound/game-deathmatch.mp3": a26,
+  "/dist/sound/menu-error.mp3": a27,
+  "/dist/sound/game-music-stem-1.mp3": a28,
+  "/dist/sound/game-pause-out.mp3": a29,
+  "/dist/sound/game-music-stem-3.mp3": a30,
+  "/dist/sound/game-music-stem-2.mp3": a31,
+  "/dist/sound/menu-navigate.mp3": a32,
+  "/dist/sound/game-start-out.mp3": a33,
+  "/dist/sound/game-end.mp3": a34,
+  "/dist/sound/menu-music.mp3": a35,
+  "/dist/sound/game-music-stem-4.mp3": a36,
+  "/dist/sound/game-power-up.mp3": a37,
 }

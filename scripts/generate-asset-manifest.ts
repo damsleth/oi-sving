@@ -12,6 +12,7 @@ const outFile = join(root, 'server/embedded-assets.ts')
 
 const ROOTS = [
   { fsPath: join(root, 'index.html'), urlPath: '/index.html' },
+  { fsPath: join(root, 'manifest.webmanifest'), urlPath: '/manifest.webmanifest' },
 ]
 
 async function walk(dir: string, out: string[]): Promise<void> {

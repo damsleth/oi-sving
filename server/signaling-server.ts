@@ -9,8 +9,16 @@
 //   bun run build:signaling
 
 import { promises as dns } from 'node:dns'
+import { watch as fsWatch } from 'node:fs'
 
 import { embeddedAssets } from './embedded-assets'
+
+const DEV = process.env.OISVING_DEV === '1'
+
+// Dev-only live-reload fanout. Each /__reload subscriber registers its
+// stream controller here; the dist/ watcher below pushes one SSE event
+// per debounced filesystem change. Empty in production builds.
+const reloadClients = new Set<ReadableStreamDefaultController<Uint8Array>>()
 
 interface RoomMember {
   peerId: string
@@ -56,6 +64,7 @@ const MIME_TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 }
 
 function mintCode(): string {
@@ -181,6 +190,28 @@ const server = Bun.serve<WsData>({
     if (url.pathname === '/health') {
       return new Response(JSON.stringify({ ok: true, rooms: rooms.size }), {
         headers: { 'content-type': 'application/json' },
+      })
+    }
+    if (url.pathname === '/__reload') {
+      // Dev-only SSE: the watcher below pushes 'reload' events when
+      // dist/ changes. Production / standalone builds 404 here so a
+      // shipped binary never speaks the dev protocol.
+      if (!DEV) return new Response('Not found\n', { status: 404 })
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          reloadClients.add(controller)
+          controller.enqueue(new TextEncoder().encode('retry: 2000\n: connected\n\n'))
+        },
+        cancel(controller) {
+          reloadClients.delete(controller)
+        },
+      })
+      return new Response(stream, {
+        headers: {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache, no-transform',
+          'connection': 'keep-alive',
+        },
       })
     }
     if (url.pathname === '/rooms') {
@@ -327,6 +358,32 @@ const server = Bun.serve<WsData>({
 
 console.log(`oi-sving LAN server on http://localhost:${server.port}/`)
 console.log(`serving ${STATIC_ROOT}`)
+
+if (DEV) {
+  // Watch dist/ recursively. Bun rebuilds JS and CSS into dist/, so a
+  // single watcher catches both kinds of edits. Debounced because saving
+  // a file usually emits 2-3 fs events (truncate + rename + write) and
+  // we only want one reload per logical save.
+  const distDir = `${STATIC_ROOT}/dist`
+  const encoder = new TextEncoder()
+  let pending: ReturnType<typeof setTimeout> | null = null
+  const fanout = () => {
+    pending = null
+    const payload = encoder.encode('event: reload\ndata: \n\n')
+    for (const ctrl of reloadClients) {
+      try { ctrl.enqueue(payload) } catch { reloadClients.delete(ctrl) }
+    }
+  }
+  try {
+    fsWatch(distDir, { recursive: true }, () => {
+      if (pending) clearTimeout(pending)
+      pending = setTimeout(fanout, 120)
+    })
+    console.log(`[dev] watching ${distDir} for live reload`)
+  } catch (e) {
+    console.warn(`[dev] could not watch ${distDir}:`, e)
+  }
+}
 
 // Graceful shutdown so `bun build --compile` outputs exit cleanly under
 // SIGTERM (verification step 7 in the multiplayer plan).

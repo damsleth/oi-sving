@@ -1,0 +1,25 @@
+{
+  "name": "Oi, Sving!",
+  "short_name": "Oi, Sving!",
+  "description": "An open source HTML5 multiplayer take on Achtung, die Kurve!",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#222222",
+  "theme_color": "#222222",
+  "icons": [
+    {
+      "src": "/dist/images/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/dist/images/og.png",
+      "type": "image/png",
+      "sizes": "600x600",
+      "purpose": "any"
+    }
+  ]
+}

@@ -88,9 +88,16 @@ OiSving.Menu = {
         OiSving.Menu.refreshHostButton();
         OiSving.Menu.refreshJoinButton();
 
-        // Net discovery is dormant by default — single-player is assumed
+        // Net discovery is dormant by default - single-player is assumed
         // until the user clicks Host or Join. revealNetDiscovery starts
-        // polling and shows the available-games block.
+        // polling and shows the available-games block. On mobile we skip
+        // straight to discovery: the user has no host/single-player path
+        // and arrived here intending to join an existing LAN game.
+        if (typeof OiSving.isMobile === 'function' && OiSving.isMobile()) {
+            OiSving.Menu.revealNetDiscovery();
+            var intro = document.getElementById('menu-intro-text');
+            if (intro) intro.textContent = 'Pick a game on this network to join.';
+        }
 
         OiSving.Menu.refreshStartGameButton();
     },
@@ -178,7 +185,9 @@ OiSving.Menu = {
         if (!rooms.length) {
             var empty = document.createElement('div');
             empty.className = 'net-room-empty';
-            empty.textContent = 'no games yet';
+            empty.textContent = (typeof OiSving.isMobile === 'function' && OiSving.isMobile())
+                ? 'Waiting for a host on this network...'
+                : 'no games yet';
             list.appendChild(empty);
             return;
         }
@@ -664,9 +673,17 @@ OiSving.Menu = {
         if ( OiSving.Menu.isRemoteTaken(playerId) ) return;
         if ( OiSving.getPlayer(playerId).isActive() ) {
             OiSving.Menu.deactivatePlayer(playerId);
-        } else {
-            OiSving.Menu.activatePlayer(playerId);
+            return;
         }
+        // Mobile: a phone runs one player. Tapping a different color
+        // swaps from whichever was previously active rather than adding
+        // to the local roster.
+        if (typeof OiSving.isMobile === 'function' && OiSving.isMobile()) {
+            OiSving.players.forEach(function(p) {
+                if (p.isActive() && p.getId() !== playerId) OiSving.Menu.deactivatePlayer(p.getId());
+            });
+        }
+        OiSving.Menu.activatePlayer(playerId);
     },
 
     requestFullScreen: function() {

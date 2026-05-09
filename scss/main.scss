@@ -995,3 +995,260 @@ body:not(.dark-theme) .net-toast {
     background: rgba(247, 246, 242, 0.98);
     color: #3F3E37;
 }
+
+#focus-indicator {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(34, 34, 34, 0.92);
+    color: #ddd;
+    font-size: 12px;
+    line-height: 1.2;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    border: 1px solid rgba(213, 169, 47, 0.5);
+
+    &.hidden { display: none; }
+
+    .focus-indicator-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #d5a92f;
+        box-shadow: 0 0 6px rgba(213, 169, 47, 0.7);
+    }
+}
+
+body:not(.dark-theme) #focus-indicator {
+    background: rgba(247, 246, 242, 0.98);
+    color: #3F3E37;
+}
+
+// Mobile / PWA layout. is-mobile is stamped on <body> by OiSving.init
+// when mobile-detect concludes the device has touch + coarse pointer.
+// We hide the host/single-player surfaces, stretch the canvas to the
+// full viewport, and disable the platform UI behaviors that conflict
+// with a real-time game (pull-to-refresh, double-tap zoom, text
+// selection, callouts, tap highlights).
+body.is-mobile {
+    height: 100dvh;
+    width: 100vw;
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+
+    #host-game,
+    #join-game,
+    #join-form,
+    #host-peers,
+    #menu-players .head,
+    #menu-players .key,
+    #menu-players .superpower,
+    #start-game {
+        display: none !important;
+    }
+
+    #menu-players-list .player {
+        // Reflow the player rows from "name + keys + superpower" into
+        // a centered tappable color tile. The row keeps its color
+        // class, so existing color rules carry through. Children stay
+        // in the float-based desktop layout but are clipped + scaled
+        // to zero so the circle reads as a solid color disk.
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        width: 56px;
+        height: 56px;
+        margin: 6px;
+        border-radius: 50%;
+        font-size: 0;
+        line-height: 0;
+        opacity: 0.45;
+        border: 2px solid transparent;
+        transition: opacity 0.15s ease, transform 0.1s ease, border-color 0.15s ease;
+
+        &.active { opacity: 1; transform: scale(1.06); border-color: rgba(255, 255, 255, 0.85); }
+        &.remote-taken { opacity: 0.18; pointer-events: none; }
+
+        &.red    { background: $default-theme-red; }
+        &.green  { background: $default-theme-green; }
+        &.blue   { background: $default-theme-blue; }
+        &.orange { background: $default-theme-orange; }
+        &.purple { background: $default-theme-purple; }
+        &.pink   { background: $default-theme-pink; }
+    }
+
+    &.dark-theme #menu-players-list {
+        .player.red    { background: $dark-theme-red; }
+        .player.green  { background: $dark-theme-green; }
+        .player.blue   { background: $dark-theme-blue; }
+        .player.orange { background: $dark-theme-orange; }
+        .player.purple { background: $dark-theme-purple; }
+        .player.pink   { background: $dark-theme-pink; }
+    }
+
+    #menu-players {
+        text-align: center;
+    }
+
+    #net-rooms {
+        margin-top: 16px;
+    }
+
+    #net-rooms-list .net-room-row {
+        font-size: 16px;
+        padding: 14px 16px;
+        margin: 6px 0;
+    }
+
+    #content-right {
+        display: none;
+    }
+
+    #content-left {
+        width: 100%;
+        height: 100%;
+    }
+
+    #layer-game {
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    #menu {
+        padding-top: max(env(safe-area-inset-top), 16px);
+        padding-bottom: max(env(safe-area-inset-bottom), 16px);
+    }
+}
+
+// Touch overlay sits over #field; child layouts swap via mode classes
+// stamped by OiSvingTouchControls. Buttons mode shows three big bottom
+// zones; relative mode shows a transparent full-area surface plus a
+// small fixed superpower button. Both honor safe-area insets so the
+// home indicator on iOS doesn't eat the controls.
+#touch-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    touch-action: none;
+
+    &.hidden { display: none; }
+
+    #touch-buttons,
+    #touch-relative {
+        display: none;
+    }
+
+    &.mode-buttons #touch-buttons { display: flex; }
+    &.mode-relative #touch-relative { display: block; }
+
+    #touch-buttons {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 28%;
+        min-height: 140px;
+        padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+        gap: 12px;
+        pointer-events: none;
+
+        .touch-btn {
+            pointer-events: auto;
+            flex: 1 1 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(34, 34, 34, 0.55);
+            color: #fff;
+            border: 2px solid rgba(255, 255, 255, 0.18);
+            border-radius: 18px;
+            font-size: 38px;
+            user-select: none;
+            transition: background 0.05s linear, transform 0.05s linear;
+        }
+
+        .touch-btn:active {
+            background: rgba(213, 169, 47, 0.55);
+            transform: scale(0.98);
+        }
+
+        .touch-btn-super {
+            flex: 0 0 22%;
+        }
+    }
+
+    #touch-relative {
+        position: absolute;
+        inset: 0;
+        pointer-events: auto;
+    }
+
+    #touch-relative-origin {
+        position: fixed;
+        width: 56px;
+        height: 56px;
+        margin: -28px 0 0 -28px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.45);
+        background: rgba(255, 255, 255, 0.08);
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        pointer-events: none;
+    }
+
+    #touch-relative-origin.is-visible { opacity: 1; }
+
+    #touch-relative-super {
+        position: absolute;
+        left: max(16px, env(safe-area-inset-left));
+        bottom: max(16px, env(safe-area-inset-bottom));
+        width: 76px;
+        height: 76px;
+        border-radius: 50%;
+        background: rgba(34, 34, 34, 0.55);
+        color: #fff;
+        border: 2px solid rgba(255, 255, 255, 0.22);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        pointer-events: auto;
+        user-select: none;
+    }
+
+    #touch-relative-super.hidden,
+    #touch-btn-super.hidden {
+        display: none;
+    }
+
+    #touch-mode-toggle {
+        position: absolute;
+        top: max(12px, env(safe-area-inset-top));
+        right: max(12px, env(safe-area-inset-right));
+        font-size: 11px;
+        padding: 6px 10px;
+        opacity: 0.65;
+        pointer-events: auto;
+    }
+}
+
+body:not(.dark-theme) #touch-overlay {
+    .touch-btn,
+    #touch-relative-super {
+        background: rgba(247, 246, 242, 0.85);
+        color: #3F3E37;
+        border-color: rgba(0, 0, 0, 0.12);
+    }
+}

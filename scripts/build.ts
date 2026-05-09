@@ -7,7 +7,8 @@ import { join } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
 const outDir = join(root, 'dist/js')
-const minify = process.env.NODE_ENV !== 'development'
+const isDev = process.env.NODE_ENV === 'development'
+const minify = !isDev
 
 await mkdir(outDir, { recursive: true })
 
@@ -17,6 +18,9 @@ const result = await Bun.build({
   target: 'browser',
   minify,
   sourcemap: 'linked',
+  define: {
+    __DEV__: JSON.stringify(isDev),
+  },
   naming: {
     entry: 'oisving.min.js',
     chunk: '[name].[hash].js',

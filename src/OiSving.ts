@@ -25,10 +25,14 @@
 
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
+import { isMobile } from './mobile-detect'
+
+OiSving.isMobile = isMobile
 
 OiSving.init = function () {
   if (u.isSafari()) u.addClass('is-safari', 'app')
   if (u.isIE()) u.addClass('is-ie', 'app')
+  if (isMobile()) u.addClass('is-mobile', 'app')
 
   OiSving.Theming.init()
   OiSving.Sound.init()
@@ -37,6 +41,8 @@ OiSving.init = function () {
   OiSving.Game.init()
   OiSving.Lightbox.init()
   if (OiSving.Toasts && OiSving.Toasts.init) OiSving.Toasts.init()
+  if (OiSving.FocusIndicator && OiSving.FocusIndicator.init) OiSving.FocusIndicator.init()
+  if (OiSving.TouchControls && OiSving.TouchControls.init) OiSving.TouchControls.init()
 
   u.removeClass('hidden', 'app')
 }

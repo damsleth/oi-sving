@@ -4,6 +4,7 @@
 // below stable.
 
 import './window'
+import './dev-reload'
 import { OiSving } from './namespace'
 import './OiSvingStorage'
 import './OiSvingUtility'
@@ -25,6 +26,8 @@ import './OiSving'
 // invoke host()/join()/startRound() once the inline UI wires them up.
 import './net'
 import './OiSvingToasts'
+import './OiSvingFocusIndicator'
+import './OiSvingTouchControls'
 
 document.addEventListener('DOMContentLoaded', () => OiSving.init())
 
