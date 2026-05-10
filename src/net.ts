@@ -886,6 +886,21 @@ OiSving.Net = {
       })
       ws.addEventListener('message', async evt => {
         const data = JSON.parse(typeof evt.data === 'string' ? evt.data : new TextDecoder().decode(evt.data))
+        // Auto-host promotion: a server in --host mode reserved this
+        // code as a vacant slot; we asked to join, the server made us
+        // the host instead. Flip into host mode and reuse the existing
+        // host code path - subsequent peers will hit handleOffer/etc.
+        // and the room is otherwise indistinguishable from one created
+        // via the explicit Net.host() call.
+        if (data.type === 'hosted' && data.autoHost) {
+          isHost = true
+          roomCode = String(data.code ?? code)
+          hostPeerIdFromJoinerView = null
+          setConnState('open')
+          events.emit('roster-update', buildRosterSnapshot())
+          resolve()
+          return
+        }
         if (data.type === 'joined') {
           const hostPlayerIds = normalizePlayerIds(data.hostPlayerIds)
           remotePlayerIdsByPeer.set(data.hostId, hostPlayerIds)
@@ -939,6 +954,35 @@ OiSving.Net = {
           remotePlayerIdsByPeer.clear()
           events.emit('host-gone')
           setConnState('closed')
+        } else if (data.type === 'peer-joined') {
+          // Only reachable when this WS was auto-host-promoted: server
+          // is now telling us a new joiner has connected to OUR room.
+          // Mirror the explicit Net.host() handler.
+          const playerIds = normalizePlayerIds(data.playerIds)
+          remotePlayerIdsByPeer.set(data.peerId, playerIds)
+          peerInfoByPeer.set(data.peerId, {
+            address: typeof data.address === 'string' ? data.address : null,
+            hostname: typeof data.hostname === 'string' ? data.hostname : null,
+          })
+          events.emit('peer-online', {
+            peerId: data.peerId,
+            address: typeof data.address === 'string' ? data.address : null,
+            hostname: typeof data.hostname === 'string' ? data.hostname : null,
+          })
+          for (const playerId of playerIds) {
+            events.emit('player-joined', { peerId: data.peerId, playerId, isLocal: false })
+          }
+          broadcastRoster()
+        } else if (data.type === 'peer-left') {
+          const departedPlayerIds = remotePlayerIdsByPeer.get(data.peerId) ?? []
+          remotePlayerIdsByPeer.delete(data.peerId)
+          peerInfoByPeer.delete(data.peerId)
+          hostMismatchTracker.forget(data.peerId)
+          events.emit('peer-offline', { peerId: data.peerId })
+          for (const playerId of departedPlayerIds) {
+            events.emit('player-left', { peerId: data.peerId, playerId, isLocal: false })
+          }
+          broadcastRoster()
         } else if (data.type === 'answer') {
           const slot = peers.get(data.from)
           if (slot) await slot.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })

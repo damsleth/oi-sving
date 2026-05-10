@@ -35,7 +35,16 @@ interface Room {
   joiners: Map<string, RoomMember>
   createdAt: number
   lastActivityAt: number
+  // True when this room was originally a vacant headless slot (created
+  // by --host). When the current promoted host disconnects, the code
+  // returns to vacancy instead of being torn down for good.
+  headless?: boolean
 }
+
+// Headless host mode: codes pre-allocated by --host that any joiner can
+// claim as host on first contact. Survives across host disconnects so a
+// new joiner becomes the next host without restarting the server.
+const headlessVacantCodes = new Set<string>()
 
 interface WsData {
   peerId?: string
@@ -221,11 +230,17 @@ const server = Bun.serve<WsData>({
       // list under the menu. CORS open since the server only ever speaks
       // on the local network — anyone who can reach this endpoint already
       // has a route to the WebSocket.
-      const list = [...rooms.values()].map(r => ({
+      const list: Array<{ code: string; hostPlayerIds: string[]; joinerCount: number }> = [...rooms.values()].map(r => ({
         code: r.code,
         hostPlayerIds: r.host.playerIds,
         joinerCount: r.joiners.size,
       }))
+      // Vacant headless slots show up too so phones see the room in the
+      // discovery list and the auto-promote path on join can fire.
+      for (const code of headlessVacantCodes) {
+        if (rooms.has(code)) continue
+        list.push({ code, hostPlayerIds: [], joinerCount: 0 })
+      }
       return new Response(JSON.stringify({ rooms: list }), {
         headers: {
           'content-type': 'application/json',
@@ -291,6 +306,34 @@ const server = Bun.serve<WsData>({
         case 'join': {
           const code = String(msg.code ?? '').toUpperCase()
           const peerId = String(msg.peerId ?? '')
+          // Headless promotion: if the requested code is a vacant
+          // --host slot (no live room yet), create the room with this
+          // joiner as the host. Reply with 'hosted' so the client
+          // flips into host mode without UI ceremony. Subsequent
+          // joiners hit the regular join path.
+          if (!rooms.has(code) && headlessVacantCodes.has(code)) {
+            if (!peerId) return send(ws, { type: 'error', message: 'missing peerId' })
+            headlessVacantCodes.delete(code)
+            const room: Room = {
+              code,
+              host: {
+                peerId,
+                ws,
+                playerIds: normalizePlayerIds(msg.playerIds),
+                address: ws.data.address ?? null,
+                hostname: ws.data.hostname ?? null,
+              },
+              joiners: new Map(),
+              createdAt: Date.now(),
+              lastActivityAt: Date.now(),
+              headless: true,
+            }
+            rooms.set(code, room)
+            ws.data.peerId = peerId
+            ws.data.code = code
+            send(ws, { type: 'hosted', code, autoHost: true })
+            return
+          }
           const room = rooms.get(code)
           if (!room) return send(ws, { type: 'error', message: 'unknown room' })
           if (!peerId) return send(ws, { type: 'error', message: 'missing peerId' })
@@ -346,11 +389,14 @@ const server = Bun.serve<WsData>({
       const room = rooms.get(code)
       if (!room) return
       if (room.host.ws === ws) {
-        // Host left: notify joiners and drop the room.
+        // Host left: notify joiners and drop the room. If the room
+        // was originally a headless --host slot, return its code to
+        // the vacant pool so the next joiner becomes the next host.
         for (const j of room.joiners.values()) {
           send(j.ws, { type: 'host-gone' })
         }
         rooms.delete(code)
+        if (room.headless) headlessVacantCodes.add(code)
       } else if (peerId) {
         room.joiners.delete(peerId)
         send(room.host.ws, { type: 'peer-left', peerId })
@@ -382,6 +428,18 @@ console.log('oi-sving LAN server')
 for (const addr of lan) console.log(`  http://${addr}:${server.port}/`)
 console.log(`  http://localhost:${server.port}/`)
 console.log(`serving ${STATIC_ROOT}`)
+
+// Headless auto-host: --host (or OISVING_AUTO_HOST=1) pre-allocates a
+// permanent room code with no owning peer. The first browser to tap
+// that room is silently promoted to WebRTC host; subsequent browsers
+// join normally. Lets a Mac mini or Pi run the binary and have games
+// available without anyone needing a desktop browser to "host".
+const wantsAutoHost = process.argv.includes('--host') || process.env.OISVING_AUTO_HOST === '1'
+if (wantsAutoHost) {
+  const code = mintCode()
+  headlessVacantCodes.add(code)
+  console.log(`auto-host enabled - reserved room code: ${code}`)
+}
 
 if (DEV) {
   // Watch dist/ recursively. Bun rebuilds JS and CSS into dist/, so a
