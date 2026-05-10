@@ -96,7 +96,9 @@ export interface PeerInfo {
 export interface RosterSnapshot {
   hostPeerId: string
   hostPlayerIds: string[]
-  joiners: Array<{ peerId: string; playerIds: string[] }>
+  hostAddress?: string | null
+  hostHostname?: string | null
+  joiners: Array<{ peerId: string; playerIds: string[]; address?: string | null; hostname?: string | null }>
 }
 
 export interface HostCurveState {
@@ -589,11 +591,17 @@ function evictPeer(peerId: string): void {
 // ---------------------------------------------------------------------------
 
 function buildRosterSnapshot(): RosterSnapshot {
+  const hostInfo = peerInfoByPeer.get(isHost ? localPeerId : (hostPeerIdFromJoinerView ?? '')) ?? { address: null, hostname: null }
   return {
     hostPeerId: isHost ? localPeerId : (hostPeerIdFromJoinerView ?? ''),
     hostPlayerIds: isHost ? [...localPlayerIds] : [...(remotePlayerIdsByPeer.get(hostPeerIdFromJoinerView ?? '') ?? [])],
+    hostAddress: hostInfo.address,
+    hostHostname: hostInfo.hostname,
     joiners: isHost
-      ? [...remotePlayerIdsByPeer.entries()].map(([peerId, playerIds]) => ({ peerId, playerIds: [...playerIds] }))
+      ? [...remotePlayerIdsByPeer.entries()].map(([peerId, playerIds]) => {
+          const info = peerInfoByPeer.get(peerId) ?? { address: null, hostname: null }
+          return { peerId, playerIds: [...playerIds], address: info.address, hostname: info.hostname }
+        })
       : [{ peerId: localPeerId, playerIds: [...localPlayerIds] }],
   }
 }
@@ -713,6 +721,18 @@ function applyRosterSnapshot(snap: RosterSnapshot): void {
   for (const [peerId, ids] of diff.newRemote) remotePlayerIdsByPeer.set(peerId, ids)
   localPlayerIds = diff.newLocal
   if (diff.newHostPeerId) hostPeerIdFromJoinerView = diff.newHostPeerId
+  // Joiner-side: absorb whatever address+hostname the host published in
+  // the snapshot so the menu can render "red - phone-of-kim.local"
+  // without needing a separate signaling round-trip.
+  if (snap.hostPeerId && (snap.hostAddress != null || snap.hostHostname != null)) {
+    peerInfoByPeer.set(snap.hostPeerId, { address: snap.hostAddress ?? null, hostname: snap.hostHostname ?? null })
+  }
+  for (const j of snap.joiners ?? []) {
+    if (!j.peerId) continue
+    if (j.address != null || j.hostname != null) {
+      peerInfoByPeer.set(j.peerId, { address: j.address ?? null, hostname: j.hostname ?? null })
+    }
+  }
   for (const ev of diff.events) {
     events.emit(ev.type, { peerId: ev.peerId, playerId: ev.playerId, isLocal: ev.isLocal })
   }
@@ -852,6 +872,15 @@ OiSving.Net = {
           const hostPlayerIds = normalizePlayerIds(data.hostPlayerIds)
           remotePlayerIdsByPeer.set(data.hostId, hostPlayerIds)
           hostPeerIdFromJoinerView = data.hostId
+          // Capture host's address/hostname so the joiner-side roster
+          // panel can show "in this room: red - <host>" without waiting
+          // on a second round-trip.
+          if (data.hostId && (data.hostAddress != null || data.hostHostname != null)) {
+            peerInfoByPeer.set(data.hostId, {
+              address: typeof data.hostAddress === 'string' ? data.hostAddress : null,
+              hostname: typeof data.hostHostname === 'string' ? data.hostHostname : null,
+            })
+          }
           for (const playerId of hostPlayerIds) {
             events.emit('player-joined', { peerId: data.hostId, playerId, isLocal: false })
           }
@@ -860,6 +889,12 @@ OiSving.Net = {
             if (!p || typeof p.peerId !== 'string' || p.peerId === localPeerId) continue
             const playerIds = normalizePlayerIds(p.playerIds)
             remotePlayerIdsByPeer.set(p.peerId, playerIds)
+            if (p.address != null || p.hostname != null) {
+              peerInfoByPeer.set(p.peerId, {
+                address: typeof p.address === 'string' ? p.address : null,
+                hostname: typeof p.hostname === 'string' ? p.hostname : null,
+              })
+            }
             for (const playerId of playerIds) {
               events.emit('player-joined', { peerId: p.peerId, playerId, isLocal: false })
             }

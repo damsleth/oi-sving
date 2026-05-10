@@ -1288,8 +1288,8 @@ body.is-mobile {
         left: 0;
         right: 0;
         bottom: 0;
-        height: 28%;
-        min-height: 140px;
+        height: 14%;
+        min-height: 70px;
         padding: 0 12px calc(12px + env(safe-area-inset-bottom));
         gap: 12px;
         pointer-events: none;
@@ -1304,7 +1304,7 @@ body.is-mobile {
             color: #fff;
             border: 2px solid rgba(255, 255, 255, 0.18);
             border-radius: 18px;
-            font-size: 38px;
+            font-size: 24px;
             user-select: none;
             transition: background 0.05s linear, transform 0.05s linear;
         }

@@ -16,7 +16,9 @@
 export interface RosterSnapshot {
   hostPeerId: string
   hostPlayerIds: string[]
-  joiners: Array<{ peerId: string; playerIds: string[] }>
+  hostAddress?: string | null
+  hostHostname?: string | null
+  joiners: Array<{ peerId: string; playerIds: string[]; address?: string | null; hostname?: string | null }>
 }
 
 export interface RosterDiffEvent {

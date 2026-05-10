@@ -311,6 +311,8 @@ const server = Bun.serve<WsData>({
             type: 'joined',
             hostId: room.host.peerId,
             hostPlayerIds: room.host.playerIds,
+            hostAddress: room.host.address,
+            hostHostname: room.host.hostname,
             peers: existingJoiners,
           })
           send(room.host.ws, { type: 'peer-joined', peerId, playerIds, address, hostname })

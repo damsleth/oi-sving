@@ -52,6 +52,7 @@ OiSving.Menu = {
                     OiSving.Menu.lockRemoteColor(entry.playerId);
                 }
                 OiSving.Menu.refreshStartGameButton();
+                OiSving.Menu.refreshHostPeers();
             });
             OiSving.Net.on('player-left', function(entry) {
                 if (entry.isLocal) {
@@ -60,14 +61,17 @@ OiSving.Menu = {
                     OiSving.Menu.unlockRemoteColor(entry.playerId);
                 }
                 OiSving.Menu.refreshStartGameButton();
+                OiSving.Menu.refreshHostPeers();
             });
             OiSving.Net.on('roster-update', function() {
                 OiSving.Menu.refreshStartGameButton();
+                OiSving.Menu.refreshHostPeers();
             });
             OiSving.Net.on('connection-state', function() {
                 OiSving.Menu.refreshStartGameButton();
                 OiSving.Menu.refreshHostButton();
                 OiSving.Menu.refreshJoinButton();
+                OiSving.Menu.refreshHostPeers();
             });
             OiSving.Net.on('peer-online', function() {
                 OiSving.Menu.refreshHostPeers();
@@ -385,32 +389,36 @@ OiSving.Menu = {
         OiSving.Menu.refreshHostPeers();
     },
 
-    // Host-only: render the list of connected joiners with their IP +
-    // (best-effort) hostname + claimed colors. Hidden when not hosting,
-    // or when nobody has joined yet — empty rooms don't need a header.
+    // Render the room participants list with their IP + (best-effort)
+    // hostname + claimed colors. Visible to both host and joiners while
+    // a multiplayer session is active. Hidden in single-player.
     refreshHostPeers: function() {
         var container = document.getElementById('host-peers');
         var list = document.getElementById('host-peers-list');
+        var title = document.getElementById('host-peers-title');
         if (!container || !list) return;
-        var hosting = !!(OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost());
-        if (!hosting) {
+        var net = OiSving.Net;
+        var inRoom = !!(net && net.isActive && net.isActive());
+        if (!inRoom) {
             container.classList.add('hidden');
             list.textContent = '';
             return;
         }
-        var peers = OiSving.Net.getKnownPeers ? OiSving.Net.getKnownPeers() : [];
+        var peers = net.getKnownPeers ? net.getKnownPeers() : [];
         if (!peers.length) {
             container.classList.add('hidden');
             list.textContent = '';
             return;
         }
+        var hosting = !!(net.isHost && net.isHost());
+        if (title) title.textContent = hosting ? 'Connected joiners' : 'In this room';
         container.classList.remove('hidden');
         // Render with DOM nodes so the hostname value (which comes from a
         // reverse-DNS lookup against the joiner's source IP) and the
         // claimed-color list never go through innerHTML.
         list.textContent = '';
         peers.forEach(function(p) {
-            var ids = OiSving.Net.getPlayerIdsForPeer ? OiSving.Net.getPlayerIdsForPeer(p.peerId) : [];
+            var ids = net.getPlayerIdsForPeer ? net.getPlayerIdsForPeer(p.peerId) : [];
             var row = document.createElement('div');
             row.className = 'host-peer-row';
 
@@ -420,9 +428,10 @@ OiSving.Menu = {
 
             var addr = document.createElement('span');
             addr.className = 'host-peer-addr';
-            var addrText = p.address || 'unknown ip';
-            if (p.hostname) addrText += ' (' + p.hostname + ')';
-            addr.textContent = addrText;
+            // Prefer hostname when present; fall back to IP. Show only one
+            // - both at once is noise for casual play and the common case
+            // is a recognizable hostname or no hostname at all.
+            addr.textContent = p.hostname || p.address || 'unknown';
 
             row.appendChild(who);
             row.appendChild(addr);
@@ -660,6 +669,11 @@ OiSving.Menu = {
         return true;
     },
 
+    // Per-page-load flag for the first-round countdown - once we've
+    // shown "Starting in N..." once, subsequent rounds use the existing
+    // instant-on-space flow.
+    _initialCountdownShown: false,
+
     onSpaceDown: function() {
         // In a joined multiplayer session only the host transitions menu ->
         // game. The joiner enters the game screen via the round-start
@@ -681,6 +695,38 @@ OiSving.Menu = {
         }
 
         this.startGameFromMenu();
+
+        // First space-press of this page-load: show a 5s countdown and
+        // auto-trigger the round. Eliminates the historical second-space
+        // requirement on the game screen. Joiners aren't affected -
+        // their round-start path goes through net events, not this one.
+        if (!OiSving.Menu._initialCountdownShown) {
+            OiSving.Menu._initialCountdownShown = true;
+            OiSving.Menu.runStartCountdown(5);
+        }
+    },
+
+    runStartCountdown: function(seconds) {
+        var lb = OiSving.Lightbox;
+        var render = function(n) {
+            if (lb && lb.show) lb.show('<h2>Starting in ' + n + '...</h2>');
+        };
+        render(seconds);
+        var remaining = seconds;
+        var tick = function() {
+            remaining--;
+            if (remaining > 0) {
+                render(remaining);
+                setTimeout(tick, 1000);
+            } else {
+                if (lb && lb.hide) lb.hide();
+                // Host -> broadcasts round-start through Net.startRound.
+                // Single-player -> kicks the round off locally. Joiners
+                // never reach here.
+                OiSving.Game.startNewRound();
+            }
+        };
+        setTimeout(tick, 1000);
     },
 
     onNextSuperPowerClicked: function(event, playerId) {
