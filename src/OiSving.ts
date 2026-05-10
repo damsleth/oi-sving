@@ -43,6 +43,7 @@ OiSving.init = function () {
   if (OiSving.Toasts && OiSving.Toasts.init) OiSving.Toasts.init()
   if (OiSving.FocusIndicator && OiSving.FocusIndicator.init) OiSving.FocusIndicator.init()
   if (OiSving.TouchControls && OiSving.TouchControls.init) OiSving.TouchControls.init()
+  if (OiSving.Orientation && OiSving.Orientation.init) OiSving.Orientation.init()
 
   u.removeClass('hidden', 'app')
 }

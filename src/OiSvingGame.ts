@@ -202,15 +202,23 @@ OiSving.Game = {
         this.CURRENT_FRAME_ID = snapshot.frameId;
 
         if (Array.isArray(snapshot.players)) {
+            // Track whether anything visible actually changed - if not we
+            // skip the renderPlayerScores rebuild, which is the dominant
+            // mobile cost (innerHTML reflow on every host frame turned
+            // a 60fps round into a sub-30fps stutter on iOS Safari).
+            var scoresChanged = false;
             snapshot.players.forEach(function(pState) {
                 var player = OiSving.getPlayer(pState.playerId);
                 if (!player) return;
-                if (player.setPoints) player.setPoints(pState.points || 0);
-                if (player.getSuperpower && player.getSuperpower().setCount) {
-                    player.getSuperpower().setCount(pState.superpowerCount || 0);
-                }
+                var pts = pState.points || 0;
+                var sp = pState.superpowerCount || 0;
+                if (player.getPoints && player.getPoints() !== pts) scoresChanged = true;
+                var sup = player.getSuperpower && player.getSuperpower();
+                if (sup && sup.getCount && sup.getCount() !== sp) scoresChanged = true;
+                if (player.setPoints) player.setPoints(pts);
+                if (sup && sup.setCount) sup.setCount(sp);
             });
-            this.renderPlayerScores();
+            if (scoresChanged) this.scheduleRenderPlayerScores();
         }
 
         if (Array.isArray(snapshot.curves)) {
@@ -368,10 +376,15 @@ OiSving.Game = {
     },
 
     onMenuButtonClicked: function() {
-        // Joiners cannot eject from a live multiplayer session via the menu
-        // button — that would tear down the WebRTC channel and leave the
-        // host with a phantom roster slot. Host can always reload to end
-        // their own room.
+        // Mobile: the only way back to the room picker. Always honor the
+        // tap; reload tears down the WS + WebRTC and the host's roster
+        // converges on the next peer-left.
+        if (typeof OiSving.isMobile === 'function' && OiSving.isMobile()) {
+            OiSving.reload();
+            return;
+        }
+        // Desktop joiners stay locked in to avoid an accidental leave -
+        // host can always reload to end their own room.
         if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) {
             return;
         }
@@ -448,11 +461,28 @@ OiSving.Game = {
     
     renderPlayerScores: function() {
         var playerHTML  = '';
-        
+
         this.players.sort(this.playerSorting);
         this.players.forEach(function(player) { playerHTML += player.renderScoreItem() });
-        
+
         this.playerScoresElement.innerHTML = playerHTML;
+    },
+
+    // Coalesce multiple snapshot-driven score updates into one rAF-aligned
+    // DOM rebuild. Multiple snapshots arriving within a single repaint
+    // (network bursts, mobile main-thread coalescing) all share one paint.
+    _scoresRenderPending: false,
+    scheduleRenderPlayerScores: function() {
+        if (this._scoresRenderPending) return;
+        this._scoresRenderPending = true;
+        var self = this;
+        var raf = (typeof window !== 'undefined' && window.requestAnimationFrame)
+            ? window.requestAnimationFrame.bind(window)
+            : function(cb) { return setTimeout(cb, 16); };
+        raf(function() {
+            self._scoresRenderPending = false;
+            self.renderPlayerScores();
+        });
     },
     
     playerSorting: function(playerA, playerB) {

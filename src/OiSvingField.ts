@@ -108,13 +108,19 @@ OiSving.Field = {
         var availableHeight = window.innerHeight;
 
         if (this.arenaWidth === undefined || this.arenaHeight === undefined) {
-            // Pre-network bootstrap and single-player: arena IS the viewport,
-            // no aspect-preserving fit is needed because the simulation grid
-            // is the local screen by definition.
-            this.arenaWidth = availableWidth;
-            this.arenaHeight = availableHeight;
-            this.width = availableWidth;
-            this.height = availableHeight;
+            // Pre-network bootstrap and single-player: clamp the arena to
+            // the configured aspect ratio so curves render the same shape
+            // regardless of viewport. Network joiners override these dims
+            // via MSG_START, so this only governs the host's first sample.
+            var aspect = (OiSving.Config.Field && OiSving.Config.Field.aspect) || (availableWidth / availableHeight);
+            var arenaW = availableWidth;
+            var arenaH = availableHeight;
+            if (arenaW / arenaH > aspect) arenaW = arenaH * aspect;
+            else arenaH = arenaW / aspect;
+            this.arenaWidth = arenaW;
+            this.arenaHeight = arenaH;
+            this.width = arenaW;
+            this.height = arenaH;
         } else {
             // Network rounds: the host's arena dimensions are authoritative
             // (broadcast in MSG_START). Every peer must render the simulation

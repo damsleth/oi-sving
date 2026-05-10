@@ -10,6 +10,7 @@
 
 import { promises as dns } from 'node:dns'
 import { watch as fsWatch } from 'node:fs'
+import { networkInterfaces } from 'node:os'
 
 import { embeddedAssets } from './embedded-assets'
 
@@ -356,7 +357,28 @@ const server = Bun.serve<WsData>({
   },
 })
 
-console.log(`oi-sving LAN server on http://localhost:${server.port}/`)
+// Enumerate non-internal IPv4 addresses so other players can see exactly
+// where to point their phone or browser without running `ifconfig`. We
+// keep the loopback line for clarity (and for users running a local
+// browser against the same machine), but lead with the LAN address(es)
+// since that's the interesting one for multiplayer.
+function lanAddresses(): string[] {
+  const out: string[] = []
+  const ifaces = networkInterfaces()
+  for (const name of Object.keys(ifaces)) {
+    for (const info of ifaces[name] ?? []) {
+      if (info.family !== 'IPv4') continue
+      if (info.internal) continue
+      out.push(info.address)
+    }
+  }
+  return out
+}
+
+const lan = lanAddresses()
+console.log('oi-sving LAN server')
+for (const addr of lan) console.log(`  http://${addr}:${server.port}/`)
+console.log(`  http://localhost:${server.port}/`)
 console.log(`serving ${STATIC_ROOT}`)
 
 if (DEV) {

@@ -38,7 +38,8 @@ OiSving.Config = {
         defaultColor: '#333333',
         defaultLineWidth: 4,
         borderColor: '#ACAC9D',
-        width: 0.7, //70% percent of the screen
+        width: 0.85, //85% of the screen, matching #content-left after content-right shrunk to 15%
+        aspect: 1.5, //3:2 arena enforced at host bootstrap; joiners receive these dims via MSG_START
     },
     
     Curve: {

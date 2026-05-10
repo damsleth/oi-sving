@@ -37,13 +37,20 @@ OiSving.Theming = {
             OiSving.Storage.set('oisving.theme', this.currentTheme);
         }
 
-        if (this.currentTheme === 'default') {
-            document.getElementById('change-theme').innerText = 'Lights on';
-        } else {
-            document.getElementById('change-theme').innerText = 'Lights off';
-        }
+        OiSving.Theming.renderToggleLabel();
 
         u.addClass(this.currentTheme + '-theme', 'app');
+    },
+
+    // Glyph reflects the action the button performs - moon when the
+    // current theme is light (tap to go dark), sun when dark (tap to
+    // go light). Plain unicode so no icon-font dependency.
+    renderToggleLabel: function() {
+        var el = document.getElementById('change-theme');
+        if (!el) return;
+        el.textContent = this.currentTheme === 'default' ? '☾' : '☀';
+        el.setAttribute('title', this.currentTheme === 'default' ? 'Switch to dark theme' : 'Switch to light theme');
+        el.setAttribute('aria-label', el.getAttribute('title') || '');
     },
 
     getThemedValue: function(section, value) {
@@ -61,12 +68,7 @@ OiSving.Theming = {
     },
 
     toggleTheme: function() {
-        if (this.currentTheme === 'default') {
-            this.changeTheme('dark');
-            document.getElementById('change-theme').innerText = 'Lights off';
-        } else {
-            this.changeTheme('default');
-            document.getElementById('change-theme').innerText = 'Lights on';
-        }
+        this.changeTheme(this.currentTheme === 'default' ? 'dark' : 'default');
+        this.renderToggleLabel();
     },
 };

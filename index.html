@@ -33,6 +33,14 @@
         <link rel='manifest' href='/manifest.webmanifest'>
     </head>
     <body id='app' class='hidden'>
+        <div id='orientation-prompt' class='hidden'>
+            <div class='orientation-prompt-content'>
+                <div class='orientation-prompt-icon'>&#8634;</div>
+                <h2>Turn your phone sideways</h2>
+                <p>Oi, Sving! plays best in landscape.</p>
+                <a href='#' id='orientation-force' class='button' onclick='OiSving.Orientation.toggleForce(); return false;'>Play in portrait anyway</a>
+            </div>
+        </div>
         <div id='content'>
             <div id='layer-menu' class='layer'>
                 <table>
@@ -92,7 +100,12 @@
                                     </form>
                                 </div>
                                 <div id='net-rooms' class='light hidden' style='margin-top:8px;'>
-                                    <div id='net-rooms-title' style='text-align:center;font-size:12px;opacity:0.6;text-transform:uppercase;letter-spacing:1px;'>Available games on this network</div>
+                                    <div id='net-rooms-header'>
+                                        <div id='net-rooms-title'>Available games on this network</div>
+                                        <div id='net-rooms-actions'>
+                                            <a href='#' id='net-rooms-search' class='button' onclick='OiSving.Menu.onSearchNetworkClicked(); return false;' title='Scan local network'>&#128269;</a>
+                                        </div>
+                                    </div>
                                     <div id='net-rooms-list'></div>
                                 </div>
                             </div>
@@ -116,6 +129,7 @@
                         </div>
                         <div id='touch-mode-toggle' class='button' onclick='OiSving.TouchControls.toggleMode(); return false;'>switch controls</div>
                     </div>
+                    <a id='mobile-menu-button' href='#' onclick='OiSving.Game.onMenuButtonClicked(); return false;' title='Back to menu'>&#9776;</a>
                 </div>
 
                 <div id='content-right' class='light'>

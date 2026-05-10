@@ -97,6 +97,11 @@ OiSving.Menu = {
             OiSving.Menu.revealNetDiscovery();
             var intro = document.getElementById('menu-intro-text');
             if (intro) intro.textContent = 'Pick a game on this network to join.';
+            // Move the theme toggle next to the rooms title so the
+            // controls cluster: [search] [☾] AVAILABLE GAMES.
+            var actions = document.getElementById('net-rooms-actions');
+            var themeBtn = document.getElementById('change-theme');
+            if (actions && themeBtn) actions.insertBefore(themeBtn, actions.firstChild);
         }
 
         OiSving.Menu.refreshStartGameButton();
@@ -155,11 +160,16 @@ OiSving.Menu = {
         }
     },
 
+    // Same-origin rooms (last result) + scan results from other hosts on
+    // the LAN. Merged before render so the user sees the union.
+    sameOriginRooms: [],
+    discoveredHosts: {},
+
     refreshAvailableRooms: function() {
         if (!OiSving.Menu.netDiscoveryRevealed) return;
         if (!OiSving.Net || !OiSving.Net.listRooms) return;
         // Hide the available-games block while we're already connected to
-        // a room — no need to advertise other lobbies in that state.
+        // a room - no need to advertise other lobbies in that state.
         var container = document.getElementById('net-rooms');
         if (OiSving.Net.isActive && OiSving.Net.isActive()) {
             if (container) u.addClass('hidden', 'net-rooms');
@@ -167,9 +177,71 @@ OiSving.Menu = {
         }
         if (container) u.removeClass('hidden', 'net-rooms');
         OiSving.Net.listRooms().then(function(rooms) {
-            OiSving.Menu.renderRoomsList(rooms || []);
+            OiSving.Menu.sameOriginRooms = rooms || [];
+            OiSving.Menu.renderRoomsList(OiSving.Menu.aggregateRooms());
         }).catch(function() {
-            OiSving.Menu.renderRoomsList([]);
+            OiSving.Menu.sameOriginRooms = [];
+            OiSving.Menu.renderRoomsList(OiSving.Menu.aggregateRooms());
+        });
+    },
+
+    // Flatten same-origin + discovered hosts into a single list. Each
+    // entry carries its origin so the renderer can label rows and the
+    // tap handler knows which signaling URL to open.
+    aggregateRooms: function() {
+        var rows = [];
+        var here = (typeof window !== 'undefined' && window.location)
+            ? window.location.protocol + '//' + window.location.host
+            : '';
+        (OiSving.Menu.sameOriginRooms || []).forEach(function(r) {
+            rows.push({ origin: here, room: r, isSameOrigin: true });
+        });
+        var hosts = OiSving.Menu.discoveredHosts || {};
+        Object.keys(hosts).forEach(function(origin) {
+            if (origin === here) return;
+            (hosts[origin] || []).forEach(function(r) {
+                rows.push({ origin: origin, room: r, isSameOrigin: false });
+            });
+        });
+        return rows;
+    },
+
+    // Subnet scan triggered by the search button. Probes /rooms across
+    // the local /24 in parallel; merges responding hosts into the room
+    // list. No-op if location.hostname isn't an IPv4 (we can't infer
+    // subnet from a hostname).
+    onSearchNetworkClicked: function() {
+        if (typeof window === 'undefined' || !window.location) return;
+        if (OiSving.Menu._searchInFlight) return;
+        var btn = document.getElementById('net-rooms-search');
+        if (btn) btn.classList.add('is-scanning');
+        OiSving.Menu._searchInFlight = true;
+        // Avoid a top-level import so the browser bundle stays the same
+        // shape: route through the namespace at call time. The module
+        // self-registers via main.ts.
+        var hd = OiSving.HostDiscovery;
+        if (!hd || !hd.scanSubnet) {
+            if (btn) btn.classList.remove('is-scanning');
+            OiSving.Menu._searchInFlight = false;
+            return;
+        }
+        var port = parseInt(window.location.port || '80', 10) || (window.location.protocol === 'https:' ? 443 : 80);
+        hd.scanSubnet({
+            selfHost: window.location.hostname,
+            port: port,
+            timeoutMs: 600,
+            concurrency: 24,
+        }).then(function(results) {
+            var hosts = {};
+            results.forEach(function(r) { hosts[r.origin] = r.rooms || []; });
+            OiSving.Menu.discoveredHosts = hosts;
+            OiSving.Menu.renderRoomsList(OiSving.Menu.aggregateRooms());
+        }).catch(function() {
+            // Stay quiet on scan failure - the existing same-origin list
+            // is still rendered, the user can retry.
+        }).finally(function() {
+            if (btn) btn.classList.remove('is-scanning');
+            OiSving.Menu._searchInFlight = false;
         });
     },
 
@@ -182,7 +254,13 @@ OiSving.Menu = {
         // (The server now whitelists player ids on ingest as well, but
         // belt-and-suspenders is the safer posture for a LAN-exposed UI.)
         list.textContent = '';
-        if (!rooms.length) {
+        // Backward-compat: callers that pass a flat array of rooms (no
+        // origin info) get auto-wrapped into the same-origin shape.
+        var entries = rooms.map(function(r) {
+            if (r && r.room) return r;
+            return { origin: '', room: r, isSameOrigin: true };
+        });
+        if (!entries.length) {
             var empty = document.createElement('div');
             empty.className = 'net-room-empty';
             empty.textContent = (typeof OiSving.isMobile === 'function' && OiSving.isMobile())
@@ -191,11 +269,14 @@ OiSving.Menu = {
             list.appendChild(empty);
             return;
         }
-        rooms.forEach(function(r) {
+        entries.forEach(function(entry) {
+            var r = entry.room || {};
+            var origin = entry.origin || '';
             var row = document.createElement('div');
             row.className = 'net-room-row button';
+            if (!entry.isSameOrigin) row.classList.add('net-room-row-remote');
             row.addEventListener('click', function() {
-                OiSving.Menu.joinRoomCode(String(r.code || ''));
+                OiSving.Menu.joinRoomCode(String(r.code || ''), entry.isSameOrigin ? null : origin);
             });
 
             var code = document.createElement('span');
@@ -206,7 +287,12 @@ OiSving.Menu = {
             meta.className = 'net-room-meta';
             var hostIds = Array.isArray(r.hostPlayerIds) ? r.hostPlayerIds : [];
             var taken = hostIds.length ? hostIds.join(', ') : '(host-only)';
-            meta.textContent = taken + ' · ' + (r.joinerCount || 0) + ' joined';
+            var line = taken + ' · ' + (r.joinerCount || 0) + ' joined';
+            if (!entry.isSameOrigin && origin) {
+                // Strip the protocol so the host:port reads cleanly.
+                line += ' · ' + origin.replace(/^[a-z]+:\/\//, '');
+            }
+            meta.textContent = line;
 
             row.appendChild(code);
             row.appendChild(meta);
@@ -214,18 +300,32 @@ OiSving.Menu = {
         });
     },
 
-    joinRoomCode: function(code) {
+    joinRoomCode: function(code, originOverride) {
         if (!OiSving.Net || !OiSving.Net.join) return;
         var normalized = String(code).toUpperCase();
+        // Cross-origin joins (rooms found via subnet scan on a different
+        // host) are wired in by mutating Config.Net.signalingUrl before
+        // Net.join reads it. The host's WS doesn't enforce same-origin,
+        // so this is just a config tweak. Restore the previous value
+        // afterwards so a follow-up host/join falls back to same-origin.
+        var cfg = (OiSving.Config && OiSving.Config.Net) || {};
+        var previousUrl = cfg.signalingUrl;
+        if (originOverride) {
+            cfg.signalingUrl = originOverride.replace(/^http/, 'ws') + '/';
+        }
+        var restore = function() {
+            if (originOverride) cfg.signalingUrl = previousUrl;
+        };
         OiSving.Net.join(normalized).then(function() {
             document.getElementById('net-status').innerText = 'Joined ' + normalized;
             OiSving.Net.showWaitingForHost && OiSving.Net.showWaitingForHost();
             OiSving.Menu.refreshStartGameButton();
             OiSving.Menu.refreshJoinButton();
-            // Hide the join form once we've successfully joined a room.
             OiSving.Menu.hideJoinForm();
+            restore();
         }).catch(function(err) {
             document.getElementById('net-status').innerText = 'Join failed: ' + err.message;
+            restore();
         });
     },
 
