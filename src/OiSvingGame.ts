@@ -594,6 +594,15 @@ OiSving.Game = {
         this.Audio.terminateRound();
         OiSving.Field.resize();
         this.checkForWinner();
+
+        // Host: blast a final MSG_HOST_STATE with isRunning=false so
+        // joiners can stop their host-state watchdog. Without this the
+        // host stops broadcasting, the joiner sees silence, and
+        // hostStateWatchdog trips peer-desync 6s into the lobby (the
+        // "host disconnected" toast right after every round).
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost() && OiSving.Net.broadcastHostState) {
+            OiSving.Net.broadcastHostState(this.collectHostStateSnapshot(this.CURRENT_FRAME_ID));
+        }
     },
 
     incrementSuperpowers: function() {

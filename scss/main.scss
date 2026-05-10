@@ -1240,6 +1240,7 @@ body.is-mobile {
         border: 2px solid rgba(255, 255, 255, 0.22);
         border-radius: 10px;
         text-decoration: none;
+        touch-action: manipulation;
         z-index: 60;
         pointer-events: auto;
     }
@@ -1288,14 +1289,21 @@ body.is-mobile {
         left: 0;
         right: 0;
         bottom: 0;
-        height: 14%;
-        min-height: 70px;
-        padding: 0 12px calc(12px + env(safe-area-inset-bottom));
-        gap: 12px;
+        height: 9%;
+        min-height: 48px;
+        padding: 0 8px calc(6px + env(safe-area-inset-bottom));
+        gap: 8px;
         pointer-events: none;
 
         .touch-btn {
             pointer-events: auto;
+            // touch-action: manipulation prevents iOS Safari's double-
+            // tap-to-zoom heuristic from kicking in on the buttons.
+            // viewport user-scalable=no is ignored on iOS for
+            // accessibility, so this per-element opt-out is the only
+            // way to keep buttons tappable in rapid succession without
+            // pinning the page zoom.
+            touch-action: manipulation;
             flex: 1 1 0;
             display: flex;
             align-items: center;
@@ -1303,8 +1311,8 @@ body.is-mobile {
             background: rgba(34, 34, 34, 0.55);
             color: #fff;
             border: 2px solid rgba(255, 255, 255, 0.18);
-            border-radius: 18px;
-            font-size: 24px;
+            border-radius: 14px;
+            font-size: 18px;
             user-select: none;
             transition: background 0.05s linear, transform 0.05s linear;
         }
@@ -1344,8 +1352,8 @@ body.is-mobile {
         position: absolute;
         left: max(16px, env(safe-area-inset-left));
         bottom: max(16px, env(safe-area-inset-bottom));
-        width: 76px;
-        height: 76px;
+        width: 56px;
+        height: 56px;
         border-radius: 50%;
         background: rgba(34, 34, 34, 0.55);
         color: #fff;
@@ -1353,9 +1361,10 @@ body.is-mobile {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 32px;
+        font-size: 24px;
         pointer-events: auto;
         user-select: none;
+        touch-action: manipulation;
     }
 
     #touch-relative-super.hidden,
@@ -1371,6 +1380,7 @@ body.is-mobile {
         padding: 6px 10px;
         opacity: 0.65;
         pointer-events: auto;
+        touch-action: manipulation;
     }
 }
 

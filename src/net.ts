@@ -460,7 +460,11 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       const snap = decodeJsonMsg(msg) as HostStateSnapshot | null
       if (snap && typeof snap === 'object') {
         OiSving.Game?.applyHostStateSnapshot?.(snap)
-        hostStateWatchdog.noteHostStateApplied()
+        // The host blasts a final snapshot with isRunning=false in
+        // terminateRound so joiners can release the watchdog cleanly.
+        // The next round-start will rearm it via the start handler.
+        if (snap.isRunning === false) hostStateWatchdog.stop()
+        else hostStateWatchdog.noteHostStateApplied()
       }
       return
     }
