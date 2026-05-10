@@ -98,3 +98,25 @@ export function diffRosterSnapshot(input: RosterDiffInput): RosterDiffOutput {
 
   return { newRemote, newLocal, newHostPeerId, events }
 }
+
+// "Game master" computation. The peer authorized to trigger a round
+// start. Rule:
+//   - If the host has any claimed players, the host is master. (A
+//     desktop running both the server and a local color-picker stays
+//     in charge of the lobby.)
+//   - Otherwise, the first joiner (in roster.joiners insertion order)
+//     who has claimed at least one player. Headless `--host` server
+//     scenarios depend on this branch so the lobby can still progress.
+//   - Returns '' when no candidate qualifies (empty room, host present
+//     but no one has claimed yet). Caller treats '' as "nobody can
+//     start yet".
+export function computeMasterPeerId(snap: RosterSnapshot): string {
+  if (!snap || !snap.hostPeerId) return ''
+  if (Array.isArray(snap.hostPlayerIds) && snap.hostPlayerIds.length > 0) {
+    return snap.hostPeerId
+  }
+  for (const j of snap.joiners ?? []) {
+    if (Array.isArray(j.playerIds) && j.playerIds.length > 0 && j.peerId) return j.peerId
+  }
+  return ''
+}

@@ -24,6 +24,10 @@ export const MSG_ROSTER = 0x08
 export const MSG_CLAIM = 0x09
 export const MSG_RELEASE = 0x0a
 export const MSG_HOST_STATE = 0x0b
+// Master-driven round start: a non-host master sends this to ask the host
+// to broadcast MSG_START. Host validates the sender is the current master
+// (computeMasterPeerId(roster)) and rebroadcasts as a normal MSG_START.
+export const MSG_START_REQUEST = 0x0c
 
 // ---------------------------------------------------------------------------
 // Player-id <-> byte conversion. PLAYER_ID_TABLE is also the canonical

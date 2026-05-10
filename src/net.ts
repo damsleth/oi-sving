@@ -41,6 +41,7 @@ import {
   MSG_LEAVE,
   MSG_STATE_HASH,
   MSG_PAUSE,
+  MSG_START_REQUEST,
   MSG_UNPAUSE,
   MSG_ROSTER,
   MSG_CLAIM,
@@ -82,6 +83,11 @@ export interface NetEvents {
   'peer-online': (entry: PeerInfo) => void
   'peer-offline': (entry: { peerId: string }) => void
   'connection-state': (state: 'idle' | 'signaling' | 'connecting' | 'open' | 'closed') => void
+  // Host-only: a non-host master sent MSG_START_REQUEST and the host
+  // already validated it was the current master. The Game/Menu layer
+  // listens for this to kick off the same round-start path the host's
+  // own space-press would.
+  'start-requested': () => void
 }
 
 export interface PeerInfo {
@@ -159,7 +165,7 @@ interface PeerSlot {
 }
 
 import { NetInputProvider } from './net-input-provider'
-import { diffRosterSnapshot } from './roster'
+import { diffRosterSnapshot, computeMasterPeerId } from './roster'
 import { applyHostConfig as applyHostConfigCore, type HostSimConfig } from './host-config'
 import {
   canStartRoundFromState,
@@ -434,6 +440,18 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       const rel = decodeJsonMsg(msg) as { playerId?: string } | null
       if (!rel?.playerId) return
       hostHandleRelease(fromSlot.peerId, rel.playerId)
+      return
+    }
+    case MSG_START_REQUEST: {
+      if (!isHost || !fromSlot) return
+      // Master-driven round start. Validate the requester is the
+      // current master of the room (computeMasterPeerId on the live
+      // roster). If not, silently drop - a stale joiner shouldn't be
+      // able to bypass the host's gate, and master can change between
+      // rosters as people claim/release colors.
+      const master = computeMasterPeerId(buildRosterSnapshot())
+      if (master !== fromSlot.peerId) return
+      events.emit('start-requested')
       return
     }
     case MSG_HOST_STATE: {
@@ -992,6 +1010,30 @@ OiSving.Net = {
   // UI uses this to enable/disable the Start Game button.
   canStartRound(): boolean {
     return canStartAuthoritativeRound()
+  },
+
+  // Current "game master" - the peer authorized to trigger a round
+  // start. See computeMasterPeerId for the rule (host-with-claims wins,
+  // else first joiner with a claim). UI uses this to decide whether
+  // the local user's start button is enabled.
+  getMasterPeerId(): string {
+    if (!isHost && !hostPeerIdFromJoinerView) return ''
+    return computeMasterPeerId(buildRosterSnapshot())
+  },
+
+  isMaster(): boolean {
+    return this.getMasterPeerId() === localPeerId
+  },
+
+  // Joiner-side: ask the host to start the round. Host validates the
+  // sender is the current master before broadcasting MSG_START.
+  // Host-side requestStartRound is a no-op - the host already starts
+  // the round directly via Net.startRound from its own UI path.
+  requestStartRound(): void {
+    if (isHost) return
+    const hostPeerId = hostPeerIdFromJoinerView
+    if (!hostPeerId) return
+    sendTo(hostPeerId, 'control', encodeJsonMsg(MSG_START_REQUEST, {}))
   },
 
   // Fetch active rooms from the LAN signaling server. Same origin by

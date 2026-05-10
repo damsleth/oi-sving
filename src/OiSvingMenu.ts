@@ -87,6 +87,14 @@ OiSving.Menu = {
                 OiSving.Menu.refreshJoinButton();
                 OiSving.Menu.refreshStartGameButton();
             });
+
+            // Master-driven round start: host receives MSG_START_REQUEST
+            // from a joiner that's the current master, and Net validates
+            // before raising this event. Run the same path the host's
+            // own space-press would.
+            OiSving.Net.on('start-requested', function() {
+                OiSving.Menu.onSpaceDown();
+            });
         }
 
         OiSving.Menu.refreshHostButton();
@@ -132,9 +140,14 @@ OiSving.Menu = {
         if (!btn) return;
         var enabled = false;
         if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive()) {
-            // Only the host can start in net mode, and only when ≥2
-            // players are claimed across the roster.
-            enabled = !!(OiSving.Net.isHost && OiSving.Net.isHost() && OiSving.Net.canStartRound && OiSving.Net.canStartRound());
+            // Net mode: enabled for whoever is the current "game master"
+            // when ≥2 players are claimed. Master is the host (when host
+            // has any local players) or the first joiner with a claim
+            // otherwise - lets headless `--host` servers hand the start
+            // gate to a real human.
+            var isMaster = !!(OiSving.Net.isMaster && OiSving.Net.isMaster());
+            var canStart = !!(OiSving.Net.canStartRound && OiSving.Net.canStartRound());
+            enabled = isMaster && canStart;
         } else {
             // Single-player + split-keyboard: ≥2 locally-active players.
             var active = OiSving.players.filter(function(p) { return p.isActive(); }).length;
@@ -675,10 +688,13 @@ OiSving.Menu = {
     _initialCountdownShown: false,
 
     onSpaceDown: function() {
-        // In a joined multiplayer session only the host transitions menu ->
-        // game. The joiner enters the game screen via the round-start
-        // listener wired in OiSving.Game.init, never via its own keyboard.
+        // Non-host master path: a joiner that's currently the game master
+        // can trigger a round start by asking the host (MSG_START_REQUEST).
+        // Host validates it's still the master before broadcasting MSG_START.
         if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) {
+            if (OiSving.Net.isMaster && OiSving.Net.isMaster() && OiSving.Net.canStartRound && OiSving.Net.canStartRound()) {
+                if (OiSving.Net.requestStartRound) OiSving.Net.requestStartRound();
+            }
             return;
         }
 
