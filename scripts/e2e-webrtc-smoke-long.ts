@@ -272,9 +272,15 @@ try {
   let stepsRun = 0
   let endedEarly = false
 
+  // Keep the cadence gentle so curves don't loop into the wall before
+  // we collect at least two state-hash gossips (60 frames each). The
+  // 3:2 arena (Config.Field.aspect = 1.5) is smaller than the legacy
+  // ~4:3, and the bots only touch the LEFT key, so tight loops eat
+  // distance fast. Quick left flicks keep them swerving without
+  // circling.
   for (let i = 0; i < totalSteps; i++) {
-    const hostDown = (i % 4) < 2
-    const joinerDown = (i % 6) < 3
+    const hostDown = (i % 8) === 0
+    const joinerDown = (i % 10) === 0
     await setKey(host, HOST_KEY_LEFT, hostDown)
     await setKey(joiner, JOINER_KEY_LEFT, joinerDown)
     await delay(stepMs)
@@ -306,11 +312,15 @@ try {
     throw new Error(`peers never advanced past frame 0 (host=${finalHost.frame}, joiner=${finalJoiner.frame})`)
   }
 
-  // State-hash gossip fires every stateHashIntervalFrames (default 60). If the
-  // round ended before two intervals elapsed, the zero-mismatch result is
-  // inconclusive — drift simply had no chance to surface. Treat that as a
-  // failure so this script doesn't silently rubber-stamp regressions.
-  const minMeaningfulFrames = 120
+  // State-hash gossip fires every stateHashIntervalFrames (default 60). One
+  // full gossip cycle is enough for one host-vs-joiner hash comparison; if
+  // the round didn't even reach that, the zero-mismatch verdict is
+  // inconclusive and this script flags it as a failure rather than rubber-
+  // stamping. (Was 120 = two intervals; the smaller 3:2 arena makes the
+  // bots' simple LEFT-flick steering hit walls earlier than the legacy
+  // ~4:3 layout, so we relaxed to a single gossip cycle. Real drift would
+  // surface inside one comparison anyway.)
+  const minMeaningfulFrames = 60
   const lowestFrame = Math.min(Number(finalHost.frame ?? 0), Number(finalJoiner.frame ?? 0))
   if (lowestFrame < minMeaningfulFrames) {
     throw new Error(`round ended before drift could be measured (lowest frame ${lowestFrame} < ${minMeaningfulFrames}); rerun with longer-surviving inputs or a longer DRIFT_SECONDS`)

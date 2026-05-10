@@ -167,6 +167,7 @@ import {
 import { decideClaim, decideRelease } from './host-roster-validator'
 import { StateHashCompare } from './state-hash-compare'
 import { HostStateWatchdog } from './host-state-watchdog'
+import { HostMismatchTracker } from './host-mismatch-tracker'
 import {
   PeerReconnectController,
   type WebRtcConnectionState,
@@ -212,6 +213,13 @@ hostStateWatchdog.setListener(event => {
     setConnState('closed')
   }
 })
+
+// Host-side per-peer mismatch tracker. The host receives MSG_STATE_HASH
+// from each joiner; on hash mismatch we push a fresh authoritative
+// MSG_HOST_STATE so the joiner can re-sync. After 3 mismatches in 5s
+// for the same peer, the round continues without that peer (eviction).
+// Pure state-machine - the tracker just decides; this module performs.
+const hostMismatchTracker = new HostMismatchTracker()
 
 // Module-level mutable state. The singleton matches the existing OiSving
 // module shape; tests inject via OiSving.Net.__setMockSocket.
@@ -452,7 +460,23 @@ function dispatch(msg: ArrayBuffer, fromSlot: PeerSlot | null): void {
       if (msg.byteLength < 9) return
       const { frameId, hash: remoteHash } = decodeStateHash(msg)
       const event = hashCompare.reportRemote(frameId, remoteHash)
-      if (event) events.emit('state-hash-mismatch', event.frameId, event.expected, event.actual)
+      if (event) {
+        events.emit('state-hash-mismatch', event.frameId, event.expected, event.actual)
+        // Recovery: push a fresh authoritative MSG_HOST_STATE to the
+        // mismatched joiner so they can re-sync from the host's view.
+        // After 3 mismatches in 5s for the same peer, the round
+        // continues without that peer.
+        const peerId = fromSlot?.peerId
+        if (peerId) {
+          const outcome = hostMismatchTracker.noteMismatch(peerId)
+          if (outcome.kind === 'evict') {
+            evictPeer(peerId)
+          } else {
+            const snap = OiSving.Game?.collectHostStateSnapshot?.(event.frameId)
+            if (snap) sendTo(peerId, 'input', encodeJsonMsg(MSG_HOST_STATE, snap))
+          }
+        }
+      }
       return
     }
     default:
@@ -521,6 +545,41 @@ function broadcast(channel: 'control' | 'input', msg: ArrayBuffer): void {
       slot.outboundQueue.push({ channel, msg })
     }
   }
+}
+
+// Targeted send to one peer. Used by the mismatch resync path to push
+// a fresh MSG_HOST_STATE only to the joiner whose hash diverged, so we
+// don't burn bandwidth on peers that are already in sync.
+function sendTo(peerId: string, channel: 'control' | 'input', msg: ArrayBuffer): void {
+  const slot = peers.get(peerId)
+  if (!slot) return
+  const ch = channel === 'control' ? slot.control : slot.input
+  if (ch && ch.readyState === 'open') ch.send(msg)
+  else slot.outboundQueue.push({ channel, msg })
+}
+
+// Host-only. Tear down a single joiner's WebRTC slot without bouncing
+// the rest of the room. Used by the mismatch tracker's eviction path
+// when a joiner has been told to resync 3 times in 5 seconds and is
+// still drifting. The signaling-server fans peer-left to remaining
+// joiners when their WS closes, but for a slot that's only kept open
+// for WebRTC (signaling already handshook), we emit player-left
+// locally so the menu and roster reconcile.
+function evictPeer(peerId: string): void {
+  const slot = peers.get(peerId)
+  if (!slot) return
+  const playerIds = remotePlayerIdsByPeer.get(peerId) ?? []
+  for (const playerId of playerIds) {
+    events.emit('player-left', { peerId, playerId, isLocal: false })
+  }
+  remotePlayerIdsByPeer.delete(peerId)
+  peerInfoByPeer.delete(peerId)
+  hostMismatchTracker.forget(peerId)
+  try { slot.control?.close() } catch { /* */ }
+  try { slot.input?.close() } catch { /* */ }
+  try { slot.pc.close() } catch { /* */ }
+  peers.delete(peerId)
+  if (isHost) broadcastRoster()
 }
 
 // ---------------------------------------------------------------------------
@@ -752,6 +811,7 @@ OiSving.Net = {
           const departedPlayerIds = remotePlayerIdsByPeer.get(data.peerId) ?? []
           remotePlayerIdsByPeer.delete(data.peerId)
           peerInfoByPeer.delete(data.peerId)
+          hostMismatchTracker.forget(data.peerId)
           events.emit('peer-offline', { peerId: data.peerId })
           for (const playerId of departedPlayerIds) {
             events.emit('player-left', { peerId: data.peerId, playerId, isLocal: false })
@@ -874,6 +934,7 @@ OiSving.Net = {
       try { slot.pc.close() } catch { /* */ }
     }
     peers.clear()
+    hostMismatchTracker.clear()
     if (signalingSocket && signalingSocket.readyState <= 1) {
       try { signalingSocket.close() } catch { /* */ }
     }
@@ -1089,6 +1150,7 @@ function attachReconnect(slot: PeerSlot, ws: WebSocket): void {
       try { slot.input?.close() } catch { /* */ }
       try { slot.pc.close() } catch { /* */ }
       peers.delete(slot.peerId)
+      hostMismatchTracker.forget(slot.peerId)
     }
   })
 }
