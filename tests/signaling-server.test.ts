@@ -272,9 +272,9 @@ describe('signaling-server WebSocket protocol', () => {
 })
 
 describe('signaling-server headless --host', () => {
-  const hostPort = port + 60
-  const hostBase = `http://127.0.0.1:${hostPort}`
-  const hostWs = `ws://127.0.0.1:${hostPort}/`
+  // Ephemeral port: a fixed random range can collide with concurrent runs.
+  let hostBase = ''
+  let hostWs = ''
   let child: ReturnType<typeof Bun.spawn> | null = null
   let reservedCode = ''
 
@@ -289,28 +289,34 @@ describe('signaling-server headless --host', () => {
       cwd: repoRoot,
       env: {
         ...process.env,
-        PORT: String(hostPort),
+        PORT: '0',
         BIND_HOST: '127.0.0.1',
         OISVING_STATIC_ROOT: staticRoot ?? repoRoot,
       },
       stdout: 'pipe',
-      stderr: 'ignore',
+      stderr: 'inherit',
     })
-    // The code is only minted at startup and logged, so read it from stdout
-    // like an operator would instead of guessing via /rooms.
+    // The code and the bound port are only known from the startup log, so
+    // read stdout like an operator would instead of guessing via /rooms.
     const reader = (child.stdout as ReadableStream<Uint8Array>).getReader()
     const decoder = new TextDecoder()
     let buf = ''
     const deadline = Date.now() + 10000
     while (Date.now() < deadline) {
       const m = buf.match(/reserved room code: ([A-Z0-9]{4})/)
-      if (m) { reservedCode = m[1]; break }
+      const p = buf.match(/http:\/\/localhost:(\d+)\//)
+      if (m && p) {
+        reservedCode = m[1]
+        hostBase = `http://127.0.0.1:${p[1]}`
+        hostWs = `ws://127.0.0.1:${p[1]}/`
+        break
+      }
       const { value, done } = await reader.read()
       if (done) break
       buf += decoder.decode(value)
     }
     reader.releaseLock()
-    if (!reservedCode) throw new Error('--host server did not log a reserved code')
+    if (!reservedCode) throw new Error('--host server did not log a reserved code and port')
   }, 15000)
 
   afterAll(async () => {
