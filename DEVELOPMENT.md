@@ -62,14 +62,6 @@ Maintainers cut a release by tagging `vX.Y.Z` and pushing the tag. GitHub Action
 bun run build:release   # writes dist/server/release/<target>/oi-sving
 ```
 
-## Cloudflare Workers signaling
-
-If you'd rather run signaling on the edge than on a laptop, `server/signaling-worker.ts` + `server/signaling-room.ts` are a deployable Worker + Durable Object pair. See `server/README.md` for the `wrangler.toml` snippet and deploy steps. After deploy:
-
-```js
-OiSving.Config.Net.signalingUrl = 'wss://<your-worker>.workers.dev/ws'
-```
-
 ## How determinism works
 
 A few moving parts that earn their keep:
@@ -89,7 +81,7 @@ The "feel" is preserved by applying the same `inputDelayFrames` (default 2 ≈ 3
 - `src/net.ts`, `src/rng.ts`, `src/input-provider.ts` - multiplayer plumbing.
 - `scss/` - compiled to `dist/css/main.css`.
 - `sound/` and `images/` - static runtime assets, copied into `dist/`.
-- `server/` - LAN signaling (Bun) and Workers signaling (Cloudflare).
+- `server/` - LAN signaling and static file server (Bun).
 - `tests/` - Bun test suite. `bun test` runs everything.
 - `scripts/` - build helpers (`build.ts`, `compile-signaling.ts`).
 
