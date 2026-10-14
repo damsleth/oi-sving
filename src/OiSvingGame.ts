@@ -531,6 +531,21 @@ OiSving.Game = {
     },
     
     startNewRound: function() {
+        // Check host readiness before touching round state: Net.startRound
+        // throws when a claimed peer's channels are down, and doing that
+        // after isRoundStarted = true wedges every later start attempt.
+        if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && OiSving.Net.isHost() && OiSving.Net.canStartRound && !OiSving.Net.canStartRound()) {
+            if (OiSving.Toasts && OiSving.Toasts.show) {
+                OiSving.Toasts.show({
+                    kind: 'warn',
+                    title: 'Not ready',
+                    body: 'Waiting for players to connect. Press space to try again.',
+                    duration: 4000,
+                });
+            }
+            return;
+        }
+
         if (OiSving.Menu && OiSving.Menu.cancelStartCountdown) OiSving.Menu.cancelStartCountdown();
         this.isRoundStarted = true;
         this.CURRENT_FRAME_ID = 0;
