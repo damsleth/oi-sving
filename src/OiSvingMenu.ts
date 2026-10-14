@@ -26,6 +26,7 @@
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
 import { StartCountdown } from './start-countdown'
+import { routeHostStartRequest } from './start-routing'
 
 OiSving.Menu = {
 
@@ -94,7 +95,9 @@ OiSving.Menu = {
             // before raising this event. Run the same path the host's
             // own space-press would.
             OiSving.Net.on('start-requested', function() {
-                OiSving.Menu.onSpaceDown();
+                var route = routeHostStartRequest(OiSving.Menu.getGamePhase());
+                if (route === 'menu-start') OiSving.Menu.onSpaceDown();
+                else if (route === 'round-start') OiSving.Game.onSpaceDown();
             });
         }
 
@@ -728,6 +731,19 @@ OiSving.Menu = {
     },
 
     startCountdown: new StartCountdown(),
+
+    getGamePhase: function() {
+        var G = OiSving.Game;
+        var layer = document.getElementById('layer-game');
+        return {
+            gameScreenActive: !!layer && !layer.classList.contains('hidden'),
+            countdownPending: OiSving.Menu.startCountdown.isPending(),
+            isRoundStarted: !!G.isRoundStarted,
+            isRunning: !!G.isRunning,
+            isPaused: !!G.isPaused,
+            isGameOver: !!G.isGameOver
+        };
+    },
 
     runStartCountdown: function(seconds) {
         var lb = OiSving.Lightbox;

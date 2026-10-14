@@ -25,6 +25,7 @@
 
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
+import { routeJoinerGameSpace } from './start-routing'
 import {
     INPUT_LEFT,
     INPUT_RIGHT,
@@ -365,7 +366,13 @@ OiSving.Game = {
         // In a joined multiplayer session only the host can start, pause,
         // or unpause. Joiner space presses on the game screen are no-ops;
         // round-start, pause, and unpause arrive via OiSving.Net events.
+        // The one exception: the game master may ask the host for the next
+        // round between rounds.
         if (OiSving.Net && OiSving.Net.isActive && OiSving.Net.isActive() && OiSving.Net.isHost && !OiSving.Net.isHost()) {
+            var phase = OiSving.Menu.getGamePhase();
+            phase.isMaster = !!(OiSving.Net.isMaster && OiSving.Net.isMaster());
+            phase.canStart = !!(OiSving.Net.canStartRound && OiSving.Net.canStartRound());
+            if (routeJoinerGameSpace(phase) === 'request') OiSving.Net.requestStartRound();
             return;
         }
 
