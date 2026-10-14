@@ -25,6 +25,7 @@
 
 import { OiSving } from './namespace'
 import { u } from './OiSvingUtility'
+import { StartCountdown } from './start-countdown'
 
 OiSving.Menu = {
 
@@ -703,6 +704,10 @@ OiSving.Menu = {
             return;
         }
 
+        // Countdown already owns the pending start; re-entering would
+        // re-init the field and could queue a second round.
+        if (OiSving.Menu.startCountdown.isPending()) return;
+
         this.buildGameCurves();
 
         if (OiSving.Game.curves.length <= 1) {
@@ -722,27 +727,33 @@ OiSving.Menu = {
         }
     },
 
+    startCountdown: new StartCountdown(),
+
     runStartCountdown: function(seconds) {
         var lb = OiSving.Lightbox;
-        var render = function(n) {
-            if (lb && lb.show) lb.show('<h2>Starting in ' + n + '...</h2>');
-        };
-        render(seconds);
-        var remaining = seconds;
-        var tick = function() {
-            remaining--;
-            if (remaining > 0) {
-                render(remaining);
-                setTimeout(tick, 1000);
-            } else {
+        OiSving.Menu.startCountdown.start(seconds, {
+            onTick: function(n) {
+                if (lb && lb.show) lb.show('<h2>Starting in ' + n + '...</h2>');
+            },
+            onDone: function() {
                 if (lb && lb.hide) lb.hide();
+                // A manual start already cancels this timer; the check
+                // covers any start path that bypasses Game.startNewRound.
+                if (OiSving.Game.isRoundStarted) return;
                 // Host -> broadcasts round-start through Net.startRound.
                 // Single-player -> kicks the round off locally. Joiners
                 // never reach here.
                 OiSving.Game.startNewRound();
             }
-        };
-        setTimeout(tick, 1000);
+        });
+    },
+
+    // Called by Game.startNewRound so space/button/start-request during
+    // the countdown starts the round now instead of again at zero.
+    cancelStartCountdown: function() {
+        if (OiSving.Menu.startCountdown.cancel() && OiSving.Lightbox && OiSving.Lightbox.hide) {
+            OiSving.Lightbox.hide();
+        }
     },
 
     onNextSuperPowerClicked: function(event, playerId) {

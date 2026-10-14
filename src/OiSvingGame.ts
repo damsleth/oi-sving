@@ -524,6 +524,7 @@ OiSving.Game = {
     },
     
     startNewRound: function() {
+        if (OiSving.Menu && OiSving.Menu.cancelStartCountdown) OiSving.Menu.cancelStartCountdown();
         this.isRoundStarted = true;
         this.CURRENT_FRAME_ID = 0;
         this.lastHostStateFrame = 0;
