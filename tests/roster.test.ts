@@ -5,7 +5,7 @@
 // confidently keeping a color the host actually rejected.
 
 import { describe, expect, test } from 'bun:test'
-import { diffRosterSnapshot, type RosterSnapshot } from '../src/roster'
+import { diffRosterSnapshot, playerIdsForPeer, type RosterSnapshot } from '../src/roster'
 
 const HOST_ID = 'host-peer'
 const ME = 'me-peer'
@@ -276,5 +276,14 @@ describe('diffRosterSnapshot — multi-peer diffs', () => {
     })
 
     expect(out.events).toEqual([])
+  })
+})
+
+describe('playerIdsForPeer', () => {
+  test('local peer resolves to its own claimed colours, not the remote map', () => {
+    const remote = new Map([['host', ['red']]])
+    expect(playerIdsForPeer('me', 'me', ['blue'], remote)).toEqual(['blue'])
+    expect(playerIdsForPeer('host', 'me', ['blue'], remote)).toEqual(['red'])
+    expect(playerIdsForPeer('ghost', 'me', ['blue'], remote)).toEqual([])
   })
 })

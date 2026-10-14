@@ -134,3 +134,16 @@ export function resolveMasterPeerId(input: {
   if (input.isHost) return computeMasterPeerId(input.liveSnapshot)
   return input.lastHostSnapshot ? computeMasterPeerId(input.lastHostSnapshot) : ''
 }
+
+// The local peer never appears in remotePlayerIdsByPeer, but joiners do see
+// themselves in getKnownPeers via the host snapshot, so resolve self from
+// the local claim list.
+export function playerIdsForPeer(
+  peerId: string,
+  localPeerId: string,
+  localPlayerIds: string[],
+  remote: Map<string, string[]>,
+): string[] {
+  if (peerId === localPeerId) return [...localPlayerIds]
+  return [...(remote.get(peerId) ?? [])]
+}

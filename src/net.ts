@@ -165,7 +165,7 @@ interface PeerSlot {
 }
 
 import { NetInputProvider } from './net-input-provider'
-import { diffRosterSnapshot, computeMasterPeerId, resolveMasterPeerId } from './roster'
+import { diffRosterSnapshot, computeMasterPeerId, resolveMasterPeerId, playerIdsForPeer } from './roster'
 import { applyHostConfig as applyHostConfigCore, type HostSimConfig } from './host-config'
 import {
   canStartRoundFromState,
@@ -807,7 +807,7 @@ OiSving.Net = {
   // Look up the player ids claimed by a given peer. Useful next to
   // getKnownPeers when rendering "joiner X has claimed (red, blue)".
   getPlayerIdsForPeer(peerId: string): string[] {
-    return [...(remotePlayerIdsByPeer.get(peerId) ?? [])]
+    return playerIdsForPeer(peerId, localPeerId, localPlayerIds, remotePlayerIdsByPeer)
   },
 
   on<E extends EventName>(name: E, fn: NetEvents[E]): () => void {
