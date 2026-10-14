@@ -30,6 +30,16 @@ Override port or bind host as needed:
 BIND_HOST=0.0.0.0 PORT=9000 ./oi-sving
 ```
 
+### Headless host
+
+On an always-on box (Mac mini, Pi) nobody has to open a desktop browser to host. Start the binary with `--host` (or `OISVING_AUTO_HOST=1`):
+
+```sh
+./oi-sving --host
+```
+
+It logs a reserved room code (`auto-host enabled - reserved room code: K7P3`) and lists it in `/rooms`. The first browser to join that code becomes the WebRTC host, and everyone after joins normally. When that host leaves, the code goes back to being vacant and the next joiner is promoted. The server itself never plays; it only brokers signaling.
+
 ## Playing
 
 Single-player and split-keyboard work out of the box. Players activate by pressing their assigned keys on the menu screen. SPACE starts.

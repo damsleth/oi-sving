@@ -32,6 +32,22 @@ room code, joiners exchange it out-of-band, and the server brokers SDP +
 ICE between host and joiners. Once datachannels are open, signaling is
 no longer on the gameplay data path.
 
+## Headless host (`--host`)
+
+```sh
+./dist/server/oi-sving --host      # or OISVING_AUTO_HOST=1
+```
+
+At startup the server reserves one room code and logs
+`auto-host enabled - reserved room code: <CODE>`. The code appears in
+`GET /rooms` with `hostPlayerIds: []` and `joinerCount: 0` while vacant.
+The first browser to `join` that code is promoted to host and gets
+`{ "type": "hosted", "code": "<CODE>", "autoHost": true }` instead of
+`joined`; later joiners get the normal `joined` reply with the promoted
+peer as `hostId`. When the promoted host disconnects, joiners receive
+`host-gone` and the code becomes vacant again for the next joiner. The
+server is never a game peer - the host is always a browser.
+
 ## Wire protocol
 
 All messages are JSON (the gameplay path uses binary RTC datachannels,

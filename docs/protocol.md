@@ -11,7 +11,7 @@ Joiner ↔ server only. JSON over the same WebSocket the server uses for HTTP. T
 | Direction | `type` | Body | Notes |
 |-----------|--------|------|-------|
 | host → server | `host` | `{ peerId, playerIds[] }` | Mints a 4-character room code. |
-| server → host | `hosted` | `{ code }` | Server replies with the minted code. |
+| server → host | `hosted` | `{ code, autoHost? }` | Server replies with the minted code. `autoHost: true` means a `join` on a vacant `--host` code promoted the sender to host. |
 | joiner → server | `join` | `{ code, peerId, playerIds[] }` | Server validates the code. |
 | server → joiner | `joined` | `{ hostId, hostPlayerIds[], peers: [{ peerId, playerIds[], address, hostname }] }` | Server tells the joiner who the host is and which existing joiners need direct WebRTC connections. `address` is the peer's IP (string or null); `hostname` is best-effort reverse DNS (often null on LAN). |
 | server → host | `peer-joined` | `{ peerId, playerIds[], address, hostname }` | Fired when a joiner connects. `address` and `hostname` populate the host's "who joined" UI. `hostname` may be null if reverse DNS hasn't landed yet (resolved off the upgrade path with a 500ms timeout). |

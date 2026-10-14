@@ -6,6 +6,7 @@
 //   - WebSocket host / join handshake including the XSS whitelist
 //   - peer-joined fanout shape (now carrying address + hostname)
 //   - host close fans out host-gone to joiners
+//   - headless --host: reserved code, first-joiner promotion, re-vacating
 //
 // The server module itself starts Bun.serve on import, so we can't import
 // it directly without conflicting on PORT. Spawning a child gives us a
@@ -77,9 +78,9 @@ interface WsRpc {
   close: () => void
 }
 
-function openWs(): Promise<WsRpc> {
+function openWs(url: string = wsUrl): Promise<WsRpc> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(url)
     const inbox: Array<Record<string, unknown>> = []
     const waiters: Array<{ predicate: (msg: Record<string, unknown>) => boolean; resolve: (msg: Record<string, unknown>) => void; reject: (err: Error) => void; label: string }> = []
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -267,5 +268,96 @@ describe('signaling-server WebSocket protocol', () => {
     const gone = await joiner.waitFor(m => m.type === 'host-gone', 'host-gone')
     expect(gone.type).toBe('host-gone')
     joiner.close()
+  })
+})
+
+describe('signaling-server headless --host', () => {
+  const hostPort = port + 60
+  const hostBase = `http://127.0.0.1:${hostPort}`
+  const hostWs = `ws://127.0.0.1:${hostPort}/`
+  let child: ReturnType<typeof Bun.spawn> | null = null
+  let reservedCode = ''
+
+  async function listedRooms(): Promise<Array<{ code: string; hostPlayerIds: string[]; joinerCount: number }>> {
+    const res = await fetch(`${hostBase}/rooms`)
+    return ((await res.json()) as { rooms: Array<{ code: string; hostPlayerIds: string[]; joinerCount: number }> }).rooms
+  }
+
+  beforeAll(async () => {
+    child = Bun.spawn({
+      cmd: ['bun', 'run', 'server/signaling-server.ts', '--host'],
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PORT: String(hostPort),
+        BIND_HOST: '127.0.0.1',
+        OISVING_STATIC_ROOT: staticRoot ?? repoRoot,
+      },
+      stdout: 'pipe',
+      stderr: 'ignore',
+    })
+    // The code is only minted at startup and logged, so read it from stdout
+    // like an operator would instead of guessing via /rooms.
+    const reader = (child.stdout as ReadableStream<Uint8Array>).getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    const deadline = Date.now() + 10000
+    while (Date.now() < deadline) {
+      const m = buf.match(/reserved room code: ([A-Z0-9]{4})/)
+      if (m) { reservedCode = m[1]; break }
+      const { value, done } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value)
+    }
+    reader.releaseLock()
+    if (!reservedCode) throw new Error('--host server did not log a reserved code')
+  }, 15000)
+
+  afterAll(async () => {
+    try { child?.kill() } catch { /* */ }
+    await child?.exited.catch(() => {})
+  }, 15000)
+
+  test('/rooms lists the reserved code as vacant before anyone joins', async () => {
+    const rooms = await listedRooms()
+    expect(rooms).toContainEqual({ code: reservedCode, hostPlayerIds: [], joinerCount: 0 })
+  })
+
+  test('first joiner is promoted with autoHost, second joins the promoted host, vacated code is re-promoted', async () => {
+    const first = await openWs(hostWs)
+    first.send({ type: 'join', code: reservedCode, peerId: 'auto-first', playerIds: ['red'] })
+    const hosted = await first.waitFor(m => m.type === 'hosted', 'hosted') as { code: string; autoHost?: boolean }
+    expect(hosted.code).toBe(reservedCode)
+    expect(hosted.autoHost).toBe(true)
+
+    // Now a live room: advertised with the promoted host's colors.
+    expect(await listedRooms()).toContainEqual({ code: reservedCode, hostPlayerIds: ['red'], joinerCount: 0 })
+
+    const second = await openWs(hostWs)
+    second.send({ type: 'join', code: reservedCode, peerId: 'auto-second', playerIds: ['blue'] })
+    const joined = await second.waitFor(m => m.type === 'joined', 'joined') as { hostId: string }
+    expect(joined.hostId).toBe('auto-first')
+    expect(second.inbox.some(m => m.type === 'hosted')).toBe(false)
+    await first.waitFor(m => m.type === 'peer-joined' && m.peerId === 'auto-second', 'peer-joined')
+
+    first.close()
+    await second.waitFor(m => m.type === 'host-gone', 'host-gone')
+    second.close()
+
+    // Poll: the server processes the close event asynchronously.
+    const started = Date.now()
+    let vacant = false
+    while (Date.now() - started < 3000) {
+      vacant = (await listedRooms()).some(r => r.code === reservedCode && r.hostPlayerIds.length === 0 && r.joinerCount === 0)
+      if (vacant) break
+      await new Promise(r => setTimeout(r, 50))
+    }
+    expect(vacant).toBe(true)
+
+    const next = await openWs(hostWs)
+    next.send({ type: 'join', code: reservedCode, peerId: 'auto-next', playerIds: ['green'] })
+    const rehosted = await next.waitFor(m => m.type === 'hosted', 'rehosted') as { autoHost?: boolean }
+    expect(rehosted.autoHost).toBe(true)
+    next.close()
   })
 })
