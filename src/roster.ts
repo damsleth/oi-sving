@@ -120,3 +120,17 @@ export function computeMasterPeerId(snap: RosterSnapshot): string {
   }
   return ''
 }
+
+// A joiner's own buildRosterSnapshot() only lists itself, so computing the
+// master from it makes every claimed joiner think it is master when the
+// host has no claims. The host owns roster order, so joiners must use the
+// last MSG_ROSTER snapshot they applied. Before the first one arrives
+// nobody is master.
+export function resolveMasterPeerId(input: {
+  isHost: boolean
+  liveSnapshot: RosterSnapshot
+  lastHostSnapshot: RosterSnapshot | null
+}): string {
+  if (input.isHost) return computeMasterPeerId(input.liveSnapshot)
+  return input.lastHostSnapshot ? computeMasterPeerId(input.lastHostSnapshot) : ''
+}

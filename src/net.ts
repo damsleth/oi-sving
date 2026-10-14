@@ -165,7 +165,7 @@ interface PeerSlot {
 }
 
 import { NetInputProvider } from './net-input-provider'
-import { diffRosterSnapshot, computeMasterPeerId } from './roster'
+import { diffRosterSnapshot, computeMasterPeerId, resolveMasterPeerId } from './roster'
 import { applyHostConfig as applyHostConfigCore, type HostSimConfig } from './host-config'
 import {
   canStartRoundFromState,
@@ -758,10 +758,14 @@ function applyRosterSnapshot(snap: RosterSnapshot): void {
   for (const ev of diff.events) {
     events.emit(ev.type, { peerId: ev.peerId, playerId: ev.playerId, isLocal: ev.isLocal })
   }
+  if (!isHost) lastHostRosterSnapshot = snap
   events.emit('roster-update', snap)
 }
 
 let hostPeerIdFromJoinerView: string | null = null
+// Last MSG_ROSTER snapshot applied on a joiner; source of truth for who is
+// game master because the host owns roster order.
+let lastHostRosterSnapshot: RosterSnapshot | null = null
 
 // ---------------------------------------------------------------------------
 // Public OiSving.Net surface. Game/Menu/Curve consume this object.
@@ -817,6 +821,7 @@ OiSving.Net = {
     localPlayerIds = getActivePlayerIds()
     remotePlayerIdsByPeer.clear()
     hostPeerIdFromJoinerView = null
+    lastHostRosterSnapshot = null
     isHost = true
     localPeerId = genPeerId()
     signalingSocket = openSignaling(cfg.signalingUrl)
@@ -879,6 +884,7 @@ OiSving.Net = {
     localPlayerIds = getActivePlayerIds()
     remotePlayerIdsByPeer.clear()
     hostPeerIdFromJoinerView = null
+    lastHostRosterSnapshot = null
     isHost = false
     localPeerId = genPeerId()
     roomCode = code
@@ -900,6 +906,7 @@ OiSving.Net = {
           isHost = true
           roomCode = String(data.code ?? code)
           hostPeerIdFromJoinerView = null
+          lastHostRosterSnapshot = null
           setConnState('open')
           events.emit('roster-update', buildRosterSnapshot())
           resolve()
@@ -1047,6 +1054,7 @@ OiSving.Net = {
     remotePlayerIdsByPeer.clear()
     peerInfoByPeer.clear()
     hostPeerIdFromJoinerView = null
+    lastHostRosterSnapshot = null
     inputBuffer = new InputBuffer()
     netProvider = null
     hashCompare.clear()
@@ -1066,7 +1074,11 @@ OiSving.Net = {
   // the local user's start button is enabled.
   getMasterPeerId(): string {
     if (!isHost && !hostPeerIdFromJoinerView) return ''
-    return computeMasterPeerId(buildRosterSnapshot())
+    return resolveMasterPeerId({
+      isHost,
+      liveSnapshot: buildRosterSnapshot(),
+      lastHostSnapshot: lastHostRosterSnapshot,
+    })
   },
 
   isMaster(): boolean {
