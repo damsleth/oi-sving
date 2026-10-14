@@ -8,7 +8,7 @@ import { mkdir, rm } from 'node:fs/promises'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { startWatchdog } from './e2e-watchdog'
+import { startWatchdog, watchdogFired, WATCHDOG_EXIT_CODE } from './e2e-watchdog'
 
 const chromePath = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const serverPort = Number(process.env.PORT ?? 8794)
@@ -111,6 +111,7 @@ const server = Bun.spawn({
 })
 
 let chrome: ReturnType<typeof Bun.spawn> | null = null
+let tearingDown: Promise<void> | null = null
 
 startWatchdog('e2e-webrtc-smoke-long', 120_000 + driftSeconds * 1000, teardown, () => {
   try { chrome?.kill('SIGKILL') } catch { /* */ }
@@ -367,12 +368,18 @@ async function killProcess(proc: ReturnType<typeof Bun.spawn> | null): Promise<v
   }
 }
 
-async function teardown(exitCode: number): Promise<void> {
+// First call wins so a watchdog teardown cannot race a normal one into a
+// different exit code.
+function teardown(exitCode: number): Promise<void> {
+  return tearingDown ??= doTeardown(exitCode)
+}
+
+async function doTeardown(exitCode: number): Promise<void> {
   try { host?.close() } catch { /* */ }
   try { joiner?.close() } catch { /* */ }
   await delay(50)
   await killProcess(chrome)
   await killProcess(server as unknown as ReturnType<typeof Bun.spawn>)
   await rm(profileDir, { recursive: true, force: true }).catch(() => {})
-  process.exit(exitCode)
+  process.exit(watchdogFired() ? WATCHDOG_EXIT_CODE : exitCode)
 }
