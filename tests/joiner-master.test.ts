@@ -3,7 +3,7 @@
 // never from its own local view, which only lists itself.
 
 import { describe, expect, test } from 'bun:test'
-import { resolveMasterPeerId, type RosterSnapshot } from '../src/roster'
+import { resolveMasterPeerId, snapshotHasEnoughPlayers, type RosterSnapshot } from '../src/roster'
 
 const hostSnap: RosterSnapshot = {
   hostPeerId: 'host',
@@ -28,5 +28,23 @@ describe('resolveMasterPeerId', () => {
 
   test('host uses its live snapshot', () => {
     expect(resolveMasterPeerId({ isHost: true, liveSnapshot: hostSnap, lastHostSnapshot: null })).toBe('A')
+  })
+})
+
+describe('snapshotHasEnoughPlayers', () => {
+  test('claim-less host + two claimed joiners: enough', () => {
+    expect(snapshotHasEnoughPlayers(hostSnap)).toBe(true)
+  })
+
+  test('one claimed joiner only: not enough', () => {
+    expect(snapshotHasEnoughPlayers({ ...hostSnap, joiners: [hostSnap.joiners[0]] })).toBe(false)
+  })
+
+  test('host claim plus one joiner claim: enough', () => {
+    expect(snapshotHasEnoughPlayers({ ...hostSnap, hostPlayerIds: ['green'], joiners: [hostSnap.joiners[0]] })).toBe(true)
+  })
+
+  test('no snapshot yet: not enough', () => {
+    expect(snapshotHasEnoughPlayers(null)).toBe(false)
   })
 })

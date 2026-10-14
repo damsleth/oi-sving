@@ -135,6 +135,15 @@ export function resolveMasterPeerId(input: {
   return input.lastHostSnapshot ? computeMasterPeerId(input.lastHostSnapshot) : ''
 }
 
+// Joiner-side start gate. Channel readiness is only knowable on the host,
+// which re-checks it when the MSG_START_REQUEST arrives, so a joiner only
+// asks whether the last host snapshot holds enough claimed players.
+export function snapshotHasEnoughPlayers(snap: RosterSnapshot | null, minPlayers = 2): boolean {
+  if (!snap) return false
+  const joinerCount = (snap.joiners ?? []).reduce((acc, j) => acc + (j.playerIds?.length ?? 0), 0)
+  return (snap.hostPlayerIds?.length ?? 0) + joinerCount >= minPlayers
+}
+
 // The local peer never appears in remotePlayerIdsByPeer, but joiners do see
 // themselves in getKnownPeers via the host snapshot, so resolve self from
 // the local claim list.

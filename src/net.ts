@@ -165,7 +165,7 @@ interface PeerSlot {
 }
 
 import { NetInputProvider } from './net-input-provider'
-import { diffRosterSnapshot, computeMasterPeerId, resolveMasterPeerId, playerIdsForPeer } from './roster'
+import { diffRosterSnapshot, computeMasterPeerId, resolveMasterPeerId, playerIdsForPeer, snapshotHasEnoughPlayers } from './roster'
 import { applyHostConfig as applyHostConfigCore, type HostSimConfig } from './host-config'
 import {
   canStartRoundFromState,
@@ -1065,6 +1065,7 @@ OiSving.Net = {
   // ≥2 players combined (local + remote) is required to start a round.
   // UI uses this to enable/disable the Start Game button.
   canStartRound(): boolean {
+    if (!isHost) return snapshotHasEnoughPlayers(lastHostRosterSnapshot)
     return canStartAuthoritativeRound()
   },
 
