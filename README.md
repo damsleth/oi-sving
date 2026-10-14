@@ -2,6 +2,8 @@
 
 > _tl;dr - HTML5 multiplayer Achtung. Download a single binary, run it, point your friends at the URL. Up to six players on one LAN, no relay, no signup, no nothing._
 
+![Four curves mid-round](docs/screenshots/gameplay.png)
+
 The name is a loose Norwegian-ish riff on the German _Achtung, die Kurve!_ . Forked from [maechler/kurve](https://github.com/maechler/kurve), rebranded, ported to Bun + TypeScript, and rebuilt around a deterministic lockstep core.
 
 ## Quickstart
@@ -44,7 +46,11 @@ It logs a reserved room code (`auto-host enabled - reserved room code: K7P3`) an
 
 Single-player and split-keyboard work out of the box. Players activate by pressing their assigned keys on the menu screen. SPACE starts.
 
+![Player menu with four players active](docs/screenshots/menu.png)
+
 ### LAN multiplayer
+
+![Hosting a room, code 6KJD](docs/screenshots/lobby.png)
 
 Joiners on the same network open `http://<host-lan-ip>:8787/` in any modern browser. Then:
 
