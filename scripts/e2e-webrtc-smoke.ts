@@ -1,6 +1,8 @@
 import { mkdir, rm } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { startWatchdog } from './e2e-watchdog'
 
 const chromePath = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const serverPort = Number(process.env.PORT ?? 8793)
@@ -102,6 +104,12 @@ const server = Bun.spawn({
 })
 
 let chrome: ReturnType<typeof Bun.spawn> | null = null
+
+startWatchdog('e2e-webrtc-smoke', 120_000, teardown, () => {
+  try { chrome?.kill('SIGKILL') } catch { /* */ }
+  try { server.kill('SIGKILL') } catch { /* */ }
+  rmSync(profileDir, { recursive: true, force: true })
+})
 let host: CdpPage | null = null
 let joiner: CdpPage | null = null
 let joinerB: CdpPage | null = null

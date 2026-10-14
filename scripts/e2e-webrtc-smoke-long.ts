@@ -5,8 +5,10 @@
 // mismatch fires. Complement to scripts/e2e-webrtc-smoke.ts, not a replacement.
 
 import { mkdir, rm } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { startWatchdog } from './e2e-watchdog'
 
 const chromePath = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const serverPort = Number(process.env.PORT ?? 8794)
@@ -109,6 +111,12 @@ const server = Bun.spawn({
 })
 
 let chrome: ReturnType<typeof Bun.spawn> | null = null
+
+startWatchdog('e2e-webrtc-smoke-long', 120_000 + driftSeconds * 1000, teardown, () => {
+  try { chrome?.kill('SIGKILL') } catch { /* */ }
+  try { server.kill('SIGKILL') } catch { /* */ }
+  rmSync(profileDir, { recursive: true, force: true })
+})
 let host: CdpPage | null = null
 let joiner: CdpPage | null = null
 
